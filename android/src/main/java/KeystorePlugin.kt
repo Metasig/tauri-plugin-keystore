@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.SharedPreferences
 //import android.hardware.biometrics.BiometricPrompt
 import androidx.biometric.BiometricPrompt
-import java.security.KeyStore
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -14,17 +13,25 @@ import android.util.Base64
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
-import java.util.Enumeration
 import javax.crypto.KeyGenerator
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import androidx.core.content.ContextCompat
-import java.nio.charset.Charset
+import org.komputing.khex.decode
+import org.komputing.khex.encode
+import java.math.BigInteger
+import java.security.*
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.ECParameterSpec
+import java.security.spec.ECPoint
+import java.security.spec.ECPublicKeySpec
 import javax.crypto.Cipher
+import javax.crypto.KeyAgreement
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-private const val KEY_ALIAS = "unime_dev"
+private const val KEY_ALIAS = "key_alias"
+private const val KEY_AGREEMENT_ALIAS = "key_agreement_alias"
 private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 private const val SHARED_PREFERENCES_NAME = "secure_storage"
 
@@ -40,6 +47,15 @@ class RetrieveRequest {
     lateinit var service: String
     lateinit var user: String
 }
+
+@InvokeArg
+class SharedSecretRequest {
+    lateinit var withP256PubKey: String
+}
+
+data class SharedSecretResponse(
+    val sharedSecret: String
+)
 
 @TauriPlugin
 class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
@@ -72,9 +88,8 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
 
                             // Encrypt the value.
                             val ciphertext =
-                                authCipher.doFinal(storeRequest.value.toByteArray(Charset.forName("UTF-8")))
+                                authCipher.doFinal(storeRequest.value.toByteArray())
                             val iv = authCipher.iv  // Capture the initialization vector.
-
                             // Store the ciphertext and IV.
                             storeCiphertext(iv, ciphertext)
                             Logger.info("Secret stored securely")
@@ -160,16 +175,101 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    fun getPublicKeyFromHex(hexPublicKey: String): PublicKey {
+        // Handle uncompressed format (starting with 04)
+        if (hexPublicKey.startsWith("04")) {
+            val hexString = hexPublicKey.substring(2) // Remove "04" prefix
+            val coordinateLength = hexString.length / 2
+
+            // Extract x and y coordinates (each should be 64 chars for secp256r1)
+            val xHex = hexString.substring(0, coordinateLength)
+            val yHex = hexString.substring(coordinateLength)
+
+            val x = BigInteger(xHex, 16)
+            val y = BigInteger(yHex, 16)
+
+            // Create EC point
+            val ecPoint = ECPoint(x, y)
+
+            // Get secp256r1 parameters
+            val params = AlgorithmParameters.getInstance("EC")
+            params.init(ECGenParameterSpec("secp256r1"))
+            val ecParameterSpec = params.getParameterSpec(ECParameterSpec::class.java)
+
+            // Create public key spec and generate the public key
+            val pubKeySpec = ECPublicKeySpec(ecPoint, ecParameterSpec)
+            val keyFactory = KeyFactory.getInstance("EC")
+            return keyFactory.generatePublic(pubKeySpec)
+        }
+        // Handle compressed format (starting with 02 or 03)
+        else if (hexPublicKey.startsWith("02") || hexPublicKey.startsWith("03")) {
+            // This requires point decompression which is more complex
+            // Consider using Bouncy Castle for this
+            throw IllegalArgumentException("Compressed keys not supported in this simple implementation")
+        }
+        else {
+            throw IllegalArgumentException("Invalid public key format")
+        }
+    }
+
+    private fun ensureP256Key(): Key? {
+        val keystore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        if (!keystore.containsAlias(KEY_AGREEMENT_ALIAS)) {
+            val keyGenerator =
+                KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, ANDROID_KEYSTORE)
+
+            val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+                KEY_AGREEMENT_ALIAS,
+                KeyProperties.PURPOSE_AGREE_KEY or KeyProperties.PURPOSE_SIGN
+            )
+                .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                .build()
+
+            keyGenerator.initialize(keyGenParameterSpec)
+            keyGenerator.generateKeyPair()
+        }
+
+        return keystore.getKey(KEY_AGREEMENT_ALIAS, null)
+    }
+
+
+    @Command
+    fun shared_secret(invoke: Invoke) {
+        val params = invoke.parseArgs(SharedSecretRequest::class.java)
+
+        // ensure we have generated the key
+        val key = ensureP256Key()
+        val agreement = getAgreement()
+
+        Logger.debug("got param: ${params.withP256PubKey}")
+
+
+
+        Logger.debug("got key: $key")
+        Logger.debug("got agreement: $agreement")
+        Logger.debug("trying to use:")
+
+        agreement.init(key)
+        agreement.doPhase(getPublicKeyFromHex(params.withP256PubKey), true)
+        val secret = agreement.generateSecret()
+        invoke.resolveObject(SharedSecretResponse(encode(secret, prefix = "")))
+    }
+
+    private fun getAgreement(): KeyAgreement {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+
+        val privateKey = keyStore.getKey(KEY_AGREEMENT_ALIAS, null)
+        val keyAgreement = KeyAgreement.getInstance("ECDH")
+        keyAgreement.init(privateKey)
+
+        return keyAgreement
+    }
+
     // Prepares and returns a Cipher instance for encryption using the key from the Keystore.
     private fun getEncryptionCipher(): Cipher {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
-        // ######## TODO: remove
-        val aliases: Enumeration<String> = keyStore.aliases()
-        Logger.warn("########## aliases:", aliases.toList().joinToString())
-        // ###############
-
-        val secretKey = keyStore.getKey(KEY_ALIAS, null) as SecretKey
+        val secretKey = keyStore.getKey(KEY_ALIAS, null)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         return cipher
@@ -193,7 +293,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
 
         val cipherData = readCipherData()
         if (cipherData == null) {
-            invoke.reject("No cipher data found in SharedPreferences", "001")
+            invoke.resolve(JSObject("{value: null}"))
             return
         }
 
@@ -216,13 +316,13 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                         val authCipher = result.cryptoObject?.cipher
                             ?: throw IllegalStateException("Cipher not available after authentication")
                         val decryptedBytes = authCipher.doFinal(ciphertext)
-                        val cleartext = String(decryptedBytes, Charset.forName("UTF-8"))
+                        val cleartext = String(decryptedBytes)
 
                         val ret = JSObject()
                         ret.put("value", cleartext)
                         invoke.resolve(ret)
                     } catch (e: Exception) {
-                        invoke.reject("Decryption failed: ${e.message}")
+                        invoke.reject("Decryption failed: $e")
                     }
                 }
 
@@ -266,8 +366,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         val secretKey = keyStore.getKey(KEY_ALIAS, null) as SecretKey
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        val spec = GCMParameterSpec(128, iv)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
         return cipher
     }
 

@@ -22,7 +22,7 @@ pub trait KeystoreExt<R: Runtime> {
     fn keystore(&self) -> &Keystore<R>;
 }
 
-impl<R: Runtime, T: Manager<R>> crate::KeystoreExt<R> for T {
+impl<R: Runtime, T: Manager<R>> KeystoreExt<R> for T {
     fn keystore(&self) -> &Keystore<R> {
         self.state::<Keystore<R>>().inner()
     }
@@ -34,7 +34,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             commands::remove,
             commands::retrieve,
-            commands::store
+            commands::store,
+            commands::shared_secret
         ])
         .setup(|app, api| {
             let keystore = mobile::init(app, api)?;

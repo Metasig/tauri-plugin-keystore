@@ -42,4 +42,11 @@ impl<R: Runtime> Keystore<R> {
             .run_mobile_plugin("remove", payload)
             .map_err(Into::into)
     }
+
+    pub fn shared_secret(&self, payload: SharedSecretRequest) -> crate::Result<SharedSecretResponse> {
+        self.0
+            .run_mobile_plugin("shared_secret", payload)
+            .map_err(Into::into)
+    }
+
 }

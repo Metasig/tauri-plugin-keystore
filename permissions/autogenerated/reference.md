@@ -2,6 +2,8 @@
 
 Default permissions for the plugin
 
+#### This default permission set includes the following:
+
 - `allow-remove`
 - `allow-retrieve`
 - `allow-store`
@@ -63,6 +65,32 @@ Enables the retrieve command without any pre-configured scope.
 <td>
 
 Denies the retrieve command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:allow-shared-secret`
+
+</td>
+<td>
+
+Enables the shared_secret command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:deny-shared-secret`
+
+</td>
+<td>
+
+Denies the shared_secret command without any pre-configured scope.
 
 </td>
 </tr>
