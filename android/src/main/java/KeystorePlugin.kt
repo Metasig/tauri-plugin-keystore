@@ -3,21 +3,18 @@ package app.tauri.keystore
 import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
-//import android.hardware.biometrics.BiometricPrompt
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import app.tauri.Logger
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
-import app.tauri.Logger
-import android.util.Base64
+import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
-import app.tauri.plugin.Invoke
-import javax.crypto.KeyGenerator
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import androidx.core.content.ContextCompat
-import org.komputing.khex.decode
 import org.komputing.khex.encode
 import java.math.BigInteger
 import java.security.*
@@ -25,9 +22,7 @@ import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECParameterSpec
 import java.security.spec.ECPoint
 import java.security.spec.ECPublicKeySpec
-import javax.crypto.Cipher
-import javax.crypto.KeyAgreement
-import javax.crypto.SecretKey
+import javax.crypto.*
 import javax.crypto.spec.GCMParameterSpec
 
 private const val KEY_ALIAS = "key_alias"
@@ -212,7 +207,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    private fun ensureP256Key(): Key? {
+    private fun ensureP256Key() {
         val keystore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         if (!keystore.containsAlias(KEY_AGREEMENT_ALIAS)) {
             val keyGenerator =
@@ -220,7 +215,9 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
 
             val keyGenParameterSpec = KeyGenParameterSpec.Builder(
                 KEY_AGREEMENT_ALIAS,
-                KeyProperties.PURPOSE_AGREE_KEY or KeyProperties.PURPOSE_SIGN
+                // do all of the above (sign internal for verifying key integrity)
+                KeyProperties.PURPOSE_AGREE_KEY or
+                        KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
             )
                 .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
                 .build()
@@ -228,31 +225,101 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
             keyGenerator.initialize(keyGenParameterSpec)
             keyGenerator.generateKeyPair()
         }
-
-        return keystore.getKey(KEY_AGREEMENT_ALIAS, null)
     }
 
+    @Command
+    fun shared_secret_pub_key(invoke: Invoke) {
+        // ensure we have generated the key
+        ensureP256Key()
+
+        try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            val certificate = keyStore.getCertificate(KEY_AGREEMENT_ALIAS)
+            val publicKey = certificate.publicKey
+
+            // Convert public key to uncompressed format (04 + x + y)
+            val ecPublicKey = publicKey as java.security.interfaces.ECPublicKey
+            val x = ecPublicKey.w.affineX
+            val y = ecPublicKey.w.affineY
+
+            // Convert to hex string with 04 prefix (uncompressed format)
+            val xHex = x.toString(16).padStart(64, '0')
+            val yHex = y.toString(16).padStart(64, '0')
+            val pubKeyHex = "04$xHex$yHex"
+
+            // Return the public key
+            val response = JSObject()
+            response.put("pubKey", pubKeyHex)
+            invoke.resolve(response)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            invoke.reject("Failed to get public key: ${e.message}")
+        }
+    }
 
     @Command
     fun shared_secret(invoke: Invoke) {
         val params = invoke.parseArgs(SharedSecretRequest::class.java)
 
         // ensure we have generated the key
-        val key = ensureP256Key()
-        val agreement = getAgreement()
+        ensureP256Key()
+        val cryptoObject = BiometricPrompt.CryptoObject(getSignature())
 
-        Logger.debug("got param: ${params.withP256PubKey}")
+        // Create biometric prompt
+        val executor = ContextCompat.getMainExecutor(activity)
+        val biometricPrompt =
+            BiometricPrompt(activity as androidx.fragment.app.FragmentActivity, executor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        super.onAuthenticationSucceeded(result)
+                        try {
+                            // Get the Signature from the authentication result.
+                            val authSig = result.cryptoObject?.signature
+                                ?: throw IllegalStateException("Signature not available after auth")
 
+                            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+                            val certificate = keyStore.getCertificate(KEY_AGREEMENT_ALIAS)
 
+                            // generate a random message
+                            val message = SecureRandom.getSeed(32)
+                            // update and output the signature previously initialized for signing
+                            authSig.update(message)
+                            val outputSig = authSig.sign()
 
-        Logger.debug("got key: $key")
-        Logger.debug("got agreement: $agreement")
-        Logger.debug("trying to use:")
+                            // init in verify mode and check the signature matches the key agreement certificate
+                            authSig.initVerify(certificate)
+                            authSig.update(message)
+                            authSig.verify(outputSig)
 
-        agreement.init(key)
-        agreement.doPhase(getPublicKeyFromHex(params.withP256PubKey), true)
-        val secret = agreement.generateSecret()
-        invoke.resolveObject(SharedSecretResponse(encode(secret, prefix = "")))
+                            // generate the shared secret from agreement
+                            val agreement = getAgreement()
+                            agreement.doPhase(getPublicKeyFromHex(params.withP256PubKey), true)
+                            val secret = agreement.generateSecret()
+                            invoke.resolveObject(SharedSecretResponse(encode(secret, prefix = "")))
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Logger.error("Encryption failed: ${e.message}")
+                        }
+                    }
+
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        super.onAuthenticationError(errorCode, errString)
+                        invoke.reject("Authentication error: $errorCode")
+                    }
+
+                    override fun onAuthenticationFailed() {
+                        super.onAuthenticationFailed()
+                        invoke.reject("Authentication failed")
+                    }
+                })
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Authenticate to Store Secret")
+            .setSubtitle("Biometric authentication is required")
+            .setNegativeButtonText("Cancel")
+            .build()
+
+        biometricPrompt.authenticate(promptInfo, cryptoObject)
     }
 
     private fun getAgreement(): KeyAgreement {
@@ -265,12 +332,22 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         return keyAgreement
     }
 
+    private fun getSignature(): Signature {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+
+        val secretKey = keyStore.getKey(KEY_AGREEMENT_ALIAS, null)
+
+        val sig = Signature.getInstance("ECDSA")
+        sig.initSign(secretKey as PrivateKey)
+        return sig
+    }
+
     // Prepares and returns a Cipher instance for encryption using the key from the Keystore.
     private fun getEncryptionCipher(): Cipher {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
         val secretKey = keyStore.getKey(KEY_ALIAS, null)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        val cipher = Cipher.getInstance( "AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         return cipher
     }

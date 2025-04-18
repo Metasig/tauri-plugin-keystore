@@ -49,4 +49,10 @@ impl<R: Runtime> Keystore<R> {
             .map_err(Into::into)
     }
 
+    pub fn shared_secret_pub_key(&self) -> crate::Result<PubKeyResponse> {
+        self.0
+            .run_mobile_plugin("shared_secret_pub_key", ())
+            .map_err(Into::into)
+    }
+
 }

@@ -26,6 +26,12 @@ pub struct RemoveRequest {
     pub user: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PubKeyResponse {
+    pub pub_key: String
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedSecretRequest {

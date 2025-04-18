@@ -331,6 +331,18 @@
           "markdownDescription": "Denies the shared_secret command without any pre-configured scope."
         },
         {
+          "description": "Enables the shared_secret_pub_key command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-shared-secret-pub-key",
+          "markdownDescription": "Enables the shared_secret_pub_key command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the shared_secret_pub_key command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-shared-secret-pub-key",
+          "markdownDescription": "Denies the shared_secret_pub_key command without any pre-configured scope."
+        },
+        {
           "description": "Enables the store command without any pre-configured scope.",
           "type": "string",
           "const": "allow-store",
@@ -343,10 +355,10 @@
           "markdownDescription": "Denies the store command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-retrieve`\n- `allow-store`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-retrieve`\n- `allow-store`\n- `allow-shared-secret`\n- `allow-shared-secret-pub-key`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-retrieve`\n- `allow-store`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-retrieve`\n- `allow-store`\n- `allow-shared-secret`\n- `allow-shared-secret-pub-key`"
         }
       ]
     }

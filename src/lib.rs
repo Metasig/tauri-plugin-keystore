@@ -35,7 +35,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::remove,
             commands::retrieve,
             commands::store,
-            commands::shared_secret
+            commands::shared_secret,
+            commands::shared_secret_pub_key
         ])
         .setup(|app, api| {
             let keystore = mobile::init(app, api)?;

@@ -7,6 +7,8 @@ Default permissions for the plugin
 - `allow-remove`
 - `allow-retrieve`
 - `allow-store`
+- `allow-shared-secret`
+- `allow-shared-secret-pub-key`
 
 ## Permission Table
 
@@ -91,6 +93,32 @@ Enables the shared_secret command without any pre-configured scope.
 <td>
 
 Denies the shared_secret command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:allow-shared-secret-pub-key`
+
+</td>
+<td>
+
+Enables the shared_secret_pub_key command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:deny-shared-secret-pub-key`
+
+</td>
+<td>
+
+Denies the shared_secret_pub_key command without any pre-configured scope.
 
 </td>
 </tr>

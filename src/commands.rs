@@ -31,6 +31,13 @@ pub(crate) async fn remove<R: Runtime>(
 }
 
 #[command]
+pub(crate) async fn shared_secret_pub_key<R: Runtime>(
+    app: AppHandle<R>,
+) -> crate::Result<PubKeyResponse> {
+    app.keystore().shared_secret_pub_key()
+}
+
+#[command]
 pub(crate) async fn shared_secret<R: Runtime> (
     app: AppHandle<R>,
     payload: SharedSecretRequest
