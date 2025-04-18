@@ -220,6 +220,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                         KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
             )
                 .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                .setDigests(KeyProperties.DIGEST_SHA256)
                 .build()
 
             keyGenerator.initialize(keyGenParameterSpec)
@@ -263,7 +264,8 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
 
         // ensure we have generated the key
         ensureP256Key()
-        val cryptoObject = BiometricPrompt.CryptoObject(getSignature())
+        val signature = getSignature()
+        Logger.debug("initiated cryptoObject")
 
         // Create biometric prompt
         val executor = ContextCompat.getMainExecutor(activity)
@@ -274,8 +276,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                         super.onAuthenticationSucceeded(result)
                         try {
                             // Get the Signature from the authentication result.
-                            val authSig = result.cryptoObject?.signature
-                                ?: throw IllegalStateException("Signature not available after auth")
+                            val authSig = signature
 
                             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
                             val certificate = keyStore.getCertificate(KEY_AGREEMENT_ALIAS)
@@ -285,11 +286,14 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                             // update and output the signature previously initialized for signing
                             authSig.update(message)
                             val outputSig = authSig.sign()
+                            Logger.debug("signed message")
 
                             // init in verify mode and check the signature matches the key agreement certificate
                             authSig.initVerify(certificate)
+                            Logger.debug("initVerify success")
                             authSig.update(message)
                             authSig.verify(outputSig)
+
 
                             // generate the shared secret from agreement
                             val agreement = getAgreement()
@@ -297,8 +301,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                             val secret = agreement.generateSecret()
                             invoke.resolveObject(SharedSecretResponse(encode(secret, prefix = "")))
                         } catch (e: Exception) {
-                            e.printStackTrace()
-                            Logger.error("Encryption failed: ${e.message}")
+                            invoke.reject("Shared secret failed: ${e.message}")
                         }
                     }
 
@@ -314,12 +317,16 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                 })
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Authenticate to Store Secret")
+            .setTitle("Authenticate to Compute Shared Secret")
             .setSubtitle("Biometric authentication is required")
             .setNegativeButtonText("Cancel")
             .build()
 
-        biometricPrompt.authenticate(promptInfo, cryptoObject)
+        try {
+            biometricPrompt.authenticate(promptInfo)
+        } catch (e: Error) {
+            Logger.error("couldn't start biometric?: ${e.message}")
+        }
     }
 
     private fun getAgreement(): KeyAgreement {
@@ -337,8 +344,10 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
 
         val secretKey = keyStore.getKey(KEY_AGREEMENT_ALIAS, null)
 
-        val sig = Signature.getInstance("ECDSA")
+        val sig = Signature.getInstance("SHA256withECDSA")
+        Logger.debug("initializing signing...")
         sig.initSign(secretKey as PrivateKey)
+        Logger.debug("initialized signing!")
         return sig
     }
 
