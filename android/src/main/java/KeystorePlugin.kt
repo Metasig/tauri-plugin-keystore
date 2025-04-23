@@ -45,11 +45,11 @@ class RetrieveRequest {
 
 @InvokeArg
 class SharedSecretRequest {
-    lateinit var withP256PubKey: String
+    lateinit var withP256PubKeys: List<String>
 }
 
 data class SharedSecretResponse(
-    val sharedSecret: String
+    val sharedSecrets: List<String>
 )
 
 @TauriPlugin
@@ -295,11 +295,19 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                             authSig.verify(outputSig)
 
 
-                            // generate the shared secret from agreement
+                            // generate the shared secrets from agreement
                             val agreement = getAgreement()
-                            agreement.doPhase(getPublicKeyFromHex(params.withP256PubKey), true)
-                            val secret = agreement.generateSecret()
-                            invoke.resolveObject(SharedSecretResponse(encode(secret, prefix = "")))
+                            val sharedSecrets = mutableListOf<String>()
+
+                            // Process each public key
+                            for (pubKey in params.withP256PubKeys) {
+                                agreement.init(keyStore.getKey(KEY_AGREEMENT_ALIAS, null))
+                                agreement.doPhase(getPublicKeyFromHex(pubKey), true)
+                                val secret = agreement.generateSecret()
+                                sharedSecrets.add(encode(secret, prefix = ""))
+                            }
+
+                            invoke.resolveObject(SharedSecretResponse(sharedSecrets))
                         } catch (e: Exception) {
                             invoke.reject("Shared secret failed: ${e.message}")
                         }
