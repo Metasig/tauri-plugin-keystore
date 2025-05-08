@@ -25,9 +25,22 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 pub struct Keystore<R: Runtime>(PluginHandle<R>);
 
 impl<R: Runtime> Keystore<R> {
+
+    pub fn store_unencrypted(&self, payload: StoreRequest) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin("store_unencrypted", payload)
+            .map_err(Into::into)
+    }
+
     pub fn store(&self, payload: StoreRequest) -> crate::Result<()> {
         self.0
             .run_mobile_plugin("store", payload)
+            .map_err(Into::into)
+    }
+
+    pub fn retrieve_unencrypted(&self, payload: RetrieveRequest) -> crate::Result<RetrieveResponse> {
+        self.0
+            .run_mobile_plugin("retrieve_unencrypted", payload)
             .map_err(Into::into)
     }
 

@@ -1,10 +1,11 @@
 #![cfg(mobile)]
 
+use serde::{Deserialize, Serialize};
 use tauri::{
     plugin::{Builder, TauriPlugin},
     Manager, Runtime,
 };
-
+use tauri::plugin::PluginApi;
 pub use models::*;
 
 mod mobile;
@@ -28,17 +29,25 @@ impl<R: Runtime, T: Manager<R>> KeystoreExt<R> for T {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Config {
+    pub unencrypted_store_name: Option<String>
+}
+
 /// Initializes the plugin.
-pub fn init<R: Runtime>() -> TauriPlugin<R> {
+pub fn init<R: Runtime>() -> TauriPlugin<R, Config> {
     Builder::new("keystore")
         .invoke_handler(tauri::generate_handler![
+            commands::store_unencrypted,
+            commands::retrieve_unencrypted,
             commands::remove,
             commands::retrieve,
             commands::store,
             commands::shared_secret,
             commands::shared_secret_pub_key
         ])
-        .setup(|app, api| {
+        .setup(|app, api: PluginApi<R, Config>| {
             let keystore = mobile::init(app, api)?;
             app.manage(keystore);
             Ok(())

@@ -7,11 +7,27 @@ use crate::models::*;
 use crate::KeystoreExt;
 
 #[command]
+pub(crate) async fn store_unencrypted<R: Runtime>(
+    app: AppHandle<R>,
+    payload: StoreRequest
+) -> crate::Result<()> {
+    app.keystore().store_unencrypted(payload)
+}
+
+#[command]
 pub(crate) async fn store<R: Runtime>(
     app: AppHandle<R>,
     payload: StoreRequest,
 ) -> crate::Result<()> {
     app.keystore().store(payload)
+}
+
+#[command]
+pub(crate) async fn retrieve_unencrypted<R: Runtime>(
+    app: AppHandle<R>,
+    payload: RetrieveRequest,
+) -> crate::Result<RetrieveResponse> {
+    app.keystore().retrieve_unencrypted(payload)
 }
 
 #[command]

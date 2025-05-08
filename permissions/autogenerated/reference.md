@@ -9,6 +9,8 @@ Default permissions for the plugin
 - `allow-store`
 - `allow-shared-secret`
 - `allow-shared-secret-pub-key`
+- `allow-store-unencrypted`
+- `allow-retrieve-unencrypted`
 
 ## Permission Table
 
@@ -67,6 +69,32 @@ Enables the retrieve command without any pre-configured scope.
 <td>
 
 Denies the retrieve command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:allow-retrieve-unencrypted`
+
+</td>
+<td>
+
+Enables the retrieve_unencrypted command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:deny-retrieve-unencrypted`
+
+</td>
+<td>
+
+Denies the retrieve_unencrypted command without any pre-configured scope.
 
 </td>
 </tr>
@@ -145,6 +173,32 @@ Enables the store command without any pre-configured scope.
 <td>
 
 Denies the store command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:allow-store-unencrypted`
+
+</td>
+<td>
+
+Enables the store_unencrypted command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:deny-store-unencrypted`
+
+</td>
+<td>
+
+Denies the store_unencrypted command without any pre-configured scope.
 
 </td>
 </tr>

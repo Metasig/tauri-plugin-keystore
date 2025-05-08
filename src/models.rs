@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoreRequest {
+    /// The key to store against
+    pub key: String,
     /// The value to store in the keystore
     pub value: String,
 }
@@ -12,10 +14,8 @@ pub struct StoreRequest {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RetrieveRequest {
-    /// The service identifier
-    pub service: String,
-    /// The user identifier
-    pub user: String,
+    /// The key to retrieve by
+    pub key: String
 }
 
 /// Response containing the retrieved value from the keystore
@@ -30,10 +30,8 @@ pub struct RetrieveResponse {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoveRequest {
-    /// The service identifier
-    pub service: String,
-    /// The user identifier
-    pub user: String,
+    /// The key to remove
+    pub key: String
 }
 
 /// Response containing the public key

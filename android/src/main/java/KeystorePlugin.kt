@@ -6,8 +6,10 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.webkit.WebView
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import app.tauri.Logger
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -30,17 +32,28 @@ private const val KEY_AGREEMENT_ALIAS = "key_agreement_alias"
 private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 private const val SHARED_PREFERENCES_NAME = "secure_storage"
 
+class KeystoreConfig {
+    var unencryptedStoreName: String? = null
+}
+
 @InvokeArg
 class StoreRequest {
+    lateinit var key: String
     lateinit var value: String
-    // TODO: use this instead?
-    // var value: String? = null
 }
 
 @InvokeArg
 class RetrieveRequest {
-    lateinit var service: String
-    lateinit var user: String
+    lateinit var key: String
+}
+
+data class RetrieveResponse(
+    val value: String?
+)
+
+@InvokeArg
+class RemoveRequest {
+    lateinit var key: String
 }
 
 @InvokeArg
@@ -54,7 +67,32 @@ data class SharedSecretResponse(
 
 @TauriPlugin
 class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
-    private val implementation = Example()
+
+    lateinit var unencryptedStoreName: String
+
+
+    override fun load(webView: WebView) {
+        super.load(webView)
+        getConfig(KeystoreConfig::class.java).let { config ->
+            unencryptedStoreName = config.unencryptedStoreName ?: "unencrypted_store"
+        }
+    }
+
+    @Command
+    fun store_unencrypted(invoke: Invoke) {
+        val args = invoke.parseArgs(StoreRequest::class.java)
+        activity.getSharedPreferences(unencryptedStoreName, Context.MODE_PRIVATE).edit {
+            putString(args.key, args.value)
+        }
+        invoke.resolve()
+    }
+
+    @Command
+    fun retrieve_unencrypted(invoke: Invoke) {
+        val args = invoke.parseArgs(RetrieveRequest::class.java)
+        val value = activity.getSharedPreferences(unencryptedStoreName, Context.MODE_PRIVATE).getString(args.key, null)
+        invoke.resolveObject(RetrieveResponse(value))
+    }
 
     @Command
     fun store(invoke: Invoke) {
@@ -86,7 +124,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                                 authCipher.doFinal(storeRequest.value.toByteArray())
                             val iv = authCipher.iv  // Capture the initialization vector.
                             // Store the ciphertext and IV.
-                            storeCiphertext(iv, ciphertext)
+                            storeCiphertext(storeRequest.key, iv, ciphertext)
                             Logger.info("Secret stored securely")
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -112,39 +150,6 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
             .build()
 
         biometricPrompt.authenticate(promptInfo, cryptoObject)
-
-        // Unlock
-//        val spec = javax.crypto.spec.GCMParameterSpec(123, iv)
-//        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
-
-//        val biometricPrompt = BiometricPrompt(
-//            activity as androidx.fragment.app.FragmentActivity,
-//            object : BiometricPrompt.AuthenticationCallback() {
-//                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-//                    super.onAuthenticationSucceeded(result)
-//                    try {
-//                        // Use the cipher from the CryptoObject to decrypt the ciphertext.
-//                        val decryptedBytes = result.cryptoObject?.cipher?.doFinal(ciphertext)
-//                        val password = decryptedBytes?.toString(StandardCharsets.UTF_8)
-//                        if (password != null) {
-//                            onDecrypted(password)
-//                        } else {
-//                            onError("Decryption failed")
-//                        }
-//                    } catch (e: Exception) {
-//                        onError("Decryption exception: ${e.message}")
-//                    }
-//                }
-//                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-//                    super.onAuthenticationError(errorCode, errString)
-//                    onError("Authentication error: $errString")
-//                }
-//                override fun onAuthenticationFailed() {
-//                    super.onAuthenticationFailed()
-//                    onError("Authentication failed")
-//                }
-//            }
-//        )
 
         invoke.resolve()
     }
@@ -370,14 +375,14 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     // Stores the IV and ciphertext in SharedPreferences.
-    private fun storeCiphertext(iv: ByteArray, ciphertext: ByteArray) {
+    private fun storeCiphertext(key: String, iv: ByteArray, ciphertext: ByteArray) {
         val prefs: SharedPreferences =
             activity.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
         val editor = prefs.edit()
         val ivEncoded = Base64.encodeToString(iv, Base64.DEFAULT)
         val ctEncoded = Base64.encodeToString(ciphertext, Base64.DEFAULT)
-        editor.putString("iv", ivEncoded)
-        editor.putString("ciphertext", ctEncoded)
+        editor.putString("iv-$key", ivEncoded)
+        editor.putString("ciphertext-$key", ctEncoded)
         editor.apply()
     }
 
@@ -466,9 +471,9 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
 
     @Command
     fun remove(invoke: Invoke) {
+        val request = invoke.parseArgs(RemoveRequest::class.java)
         try {
-            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-            keyStore.deleteEntry(KEY_ALIAS)
+
             invoke.resolve()
         } catch (e: Exception) {
             invoke.reject("Could not delete entry from KeyStore: ${e.localizedMessage}")
