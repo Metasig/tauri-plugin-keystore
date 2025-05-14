@@ -29,7 +29,7 @@ impl<R: Runtime, T: Manager<R>> KeystoreExt<R> for T {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub unencrypted_store_name: Option<String>

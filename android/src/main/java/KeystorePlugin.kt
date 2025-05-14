@@ -32,9 +32,7 @@ private const val KEY_AGREEMENT_ALIAS = "key_agreement_alias"
 private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 private const val SHARED_PREFERENCES_NAME = "secure_storage"
 
-class KeystoreConfig {
-    var unencryptedStoreName: String? = null
-}
+class KeystoreConfig @JvmOverloads constructor(val unencryptedStoreName: String = "unencrypted")
 
 @InvokeArg
 class StoreRequest {
