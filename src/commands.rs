@@ -1,7 +1,7 @@
 use hex::ToHex;
 use hkdf::Hkdf;
 use sha2::{Digest, Sha512};
-use tauri::{command, AppHandle, Runtime};
+use tauri::{command, App, AppHandle, Runtime};
 
 use crate::models::*;
 use crate::KeystoreExt;
@@ -36,6 +36,22 @@ pub(crate) async fn retrieve<R: Runtime>(
     payload: RetrieveRequest,
 ) -> crate::Result<RetrieveResponse> {
     app.keystore().retrieve(payload)
+}
+
+#[command]
+pub(crate) async fn contains_key<R: Runtime>(
+    app: AppHandle<R>,
+    payload: RetrieveRequest,
+) -> crate::Result<bool> {
+    app.keystore().contains_key(payload)
+}
+
+#[command]
+pub(crate) async fn contains_unencrypted_key<R: Runtime>(
+    app: AppHandle<R>,
+    payload: RetrieveRequest,
+) -> crate::Result<bool> {
+    app.keystore().contains_unencrypted_key(payload)
 }
 
 #[command]

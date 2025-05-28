@@ -5,6 +5,8 @@ Default permissions for the plugin
 #### This default permission set includes the following:
 
 - `allow-remove`
+- `allow-contains-key`
+- `allow-contains-unencrypted-key`
 - `allow-retrieve`
 - `allow-store`
 - `allow-shared-secret`
@@ -20,6 +22,58 @@ Default permissions for the plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`keystore:allow-contains-key`
+
+</td>
+<td>
+
+Enables the contains_key command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:deny-contains-key`
+
+</td>
+<td>
+
+Denies the contains_key command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:allow-contains-unencrypted-key`
+
+</td>
+<td>
+
+Enables the contains_unencrypted_key command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:deny-contains-unencrypted-key`
+
+</td>
+<td>
+
+Denies the contains_unencrypted_key command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

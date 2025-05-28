@@ -77,6 +77,20 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
+    fun contains_key(invoke: Invoke) {
+        val key = invoke.parseArgs(RetrieveRequest::class.java).key
+        val prefs = activity.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        invoke.resolveObject(prefs.contains("ciphertext-$key"))
+    }
+
+    @Command
+    fun contains_unencrypted_key(invoke: Invoke) {
+        val key = invoke.parseArgs(RetrieveRequest::class.java).key
+        invoke.resolveObject(activity.getSharedPreferences(unencryptedStoreName, Context.MODE_PRIVATE).contains(key))
+    }
+
+
+    @Command
     fun store_unencrypted(invoke: Invoke) {
         val args = invoke.parseArgs(StoreRequest::class.java)
         activity.getSharedPreferences(unencryptedStoreName, Context.MODE_PRIVATE).edit {
@@ -376,12 +390,12 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
     private fun storeCiphertext(key: String, iv: ByteArray, ciphertext: ByteArray) {
         val prefs: SharedPreferences =
             activity.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
-        val editor = prefs.edit()
         val ivEncoded = Base64.encodeToString(iv, Base64.DEFAULT)
         val ctEncoded = Base64.encodeToString(ciphertext, Base64.DEFAULT)
-        editor.putString("iv-$key", ivEncoded)
-        editor.putString("ciphertext-$key", ctEncoded)
-        editor.apply()
+        prefs.edit {
+            putString("iv-$key", ivEncoded)
+            putString("ciphertext-$key", ctEncoded)
+        }
     }
 
     @Command

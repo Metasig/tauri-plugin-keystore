@@ -50,6 +50,18 @@ impl<R: Runtime> Keystore<R> {
             .map_err(Into::into)
     }
 
+    pub fn contains_key(&self, payload: RetrieveRequest) -> crate::Result<bool> {
+        self.0
+            .run_mobile_plugin("contains_key", payload)
+            .map_err(Into::into)
+    }
+    
+    pub fn contains_unencrypted_key(&self, payload: RetrieveRequest) -> crate::Result<bool> {
+        self.0
+            .run_mobile_plugin("contains_unencrypted_key", payload)
+            .map_err(Into::into)
+    }
+
     pub fn remove(&self, payload: RemoveRequest) -> crate::Result<()> {
         self.0
             .run_mobile_plugin("remove", payload)

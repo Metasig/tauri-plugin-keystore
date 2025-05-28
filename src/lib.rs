@@ -41,6 +41,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R, Config> {
         .invoke_handler(tauri::generate_handler![
             commands::store_unencrypted,
             commands::retrieve_unencrypted,
+            commands::contains_key,
+            commands::contains_unencrypted_key,
             commands::remove,
             commands::retrieve,
             commands::store,

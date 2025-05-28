@@ -19,20 +19,36 @@ export async function store(key: string, value: string): Promise<void> {
     });
 }
 
-export async function retrievePlaintext(key: string) : Promise<string | null> {
-    return await invoke<{value ?: string }>("plugin:keystore|retrieve_unencrypted", {
+export async function retrievePlaintext(key: string): Promise<string | null> {
+    return await invoke<{ value?: string }>("plugin:keystore|retrieve_unencrypted", {
         payload: {
             key
         }
     }).then((r) => (r.value ? r.value : null));
 }
 
+export async function containsPlaintextKey(key: string): Promise<boolean> {
+    return await invoke<boolean>("plugin:keystore|contains_unencrypted_key", {
+        payload: {
+            key
+        }
+    });
+}
+
+export async function containsKey(key: string): Promise<boolean> {
+    return await invoke<boolean>("plugin:keystore|contains_key", {
+        payload: {
+            key
+        }
+    }).then()
+}
+
 export async function retrieve(key: string): Promise<string | null> {
-    return await invoke<{ value?: string }>("plugin:keystore|retrieve", {
+    return await invoke<{  value?: string }>("plugin:keystore|retrieve", {
         payload: {
             key
         },
-    }).then((r) => (r.value ? r.value : null));
+    }).then((r) => r.value ? r.value : null);
 }
 
 export async function remove(service: string, user: string) {
@@ -49,7 +65,9 @@ export async function sharedSecretPubKey() {
         .then((pubkey) => p256.ProjectivePoint.fromHex(pubkey));
 }
 
-export async function sharedSecret(pubKeysHex: string[], salt: string, extraInfo?: string): Promise<{ chacha20Keys: string[] } | null> {
+export async function sharedSecret(pubKeysHex: string[], salt: string, extraInfo?: string): Promise<{
+    chacha20Keys: string[]
+} | null> {
     return await invoke<{ chacha20Keys: string[] }>("plugin:keystore|shared_secret", {
         payload: {
             withP256PubKeys: pubKeysHex,
