@@ -1,8 +1,8 @@
 {
-  "name": "@impierce/tauri-plugin-keystore",
+  "name": "@0x330a/tauri-plugin-keystore",
   "version": "2.1.0-alpha.1",
-  "author": "daniel-mader",
-  "description": "Interact with the device-native key storage (Android Keystore, iOS Keychain).",
+  "author": "0x330a",
+  "description": "Interact with the device-native key storage (Android Keystore, iOS Keychain). perform ecdh operations for generating symmetric keys",
   "type": "module",
   "types": "./dist-js/index.d.ts",
   "main": "./dist-js/index.cjs",

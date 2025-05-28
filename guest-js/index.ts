@@ -1,22 +1,36 @@
 import {invoke} from "@tauri-apps/api/core";
 import {p256} from "@noble/curves/p256";
 
-export async function store(value: string): Promise<void> {
-    return await invoke<void>("plugin:keystore|store", {
+export async function storePlaintext(key: string, value: string): Promise<void> {
+    return await invoke<void>("plugin:keystore|store_unencrypted", {
         payload: {
+            key,
             value,
         },
     });
 }
 
-export async function retrieve(
-    service: string,
-    user: string
-): Promise<string | null> {
+export async function store(key: string, value: string): Promise<void> {
+    return await invoke<void>("plugin:keystore|store", {
+        payload: {
+            key,
+            value,
+        },
+    });
+}
+
+export async function retrievePlaintext(key: string) : Promise<string | null> {
+    return await invoke<{value ?: string }>("plugin:keystore|retrieve_unencrypted", {
+        payload: {
+            key
+        }
+    }).then((r) => (r.value ? r.value : null));
+}
+
+export async function retrieve(key: string): Promise<string | null> {
     return await invoke<{ value?: string }>("plugin:keystore|retrieve", {
         payload: {
-            service,
-            user,
+            key
         },
     }).then((r) => (r.value ? r.value : null));
 }
@@ -35,10 +49,10 @@ export async function sharedSecretPubKey() {
         .then((pubkey) => p256.ProjectivePoint.fromHex(pubkey));
 }
 
-export async function sharedSecret(pubHex: string, salt: string, extraInfo?: string): Promise<string | null> {
-    return await invoke<string | null>("plugin:keystore|shared_secret", {
+export async function sharedSecret(pubKeysHex: string[], salt: string, extraInfo?: string): Promise<{ chacha20Keys: string[] } | null> {
+    return await invoke<{ chacha20Keys: string[] }>("plugin:keystore|shared_secret", {
         payload: {
-            withP256PubKey: pubHex,
+            withP256PubKeys: pubKeysHex,
             extraInfo,
             salt
         },
