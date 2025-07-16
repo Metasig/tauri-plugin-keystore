@@ -402,7 +402,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
     fun retrieve(invoke: Invoke) {
         val args = invoke.parseArgs(RetrieveRequest::class.java)
 
-        val cipherData = readCipherData()
+        val cipherData = readCipherData(args.key)
         if (cipherData == null) {
             invoke.resolve(JSObject("{value: null}"))
             return
@@ -460,11 +460,11 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     // Reads the IV and ciphertext from SharedPreferences.
-    private fun readCipherData(): Pair<ByteArray, ByteArray>? {
+    private fun readCipherData(key: String): Pair<ByteArray, ByteArray>? {
         val prefs: SharedPreferences =
             activity.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
-        val ivEncoded: String? = prefs.getString("iv", null)
-        val ctEncoded: String? = prefs.getString("ciphertext", null)
+        val ivEncoded: String? = prefs.getString("iv-$key", null)
+        val ctEncoded: String? = prefs.getString("ciphertext-$key", null)
         if (ivEncoded == null || ctEncoded == null) {
             return null
         }
