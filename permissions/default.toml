@@ -1,3 +1,3 @@
 [default]
 description = "Default permissions for the plugin"
-permissions = ["allow-remove", "allow-contains-key", "allow-contains-unencrypted-key", "allow-retrieve", "allow-store", "allow-shared-secret", "allow-shared-secret-pub-key", "allow-store-unencrypted", "allow-retrieve-unencrypted"]
+permissions = ["allow-remove", "allow-contains-key", "allow-contains-unencrypted-key", "allow-retrieve", "allow-store", "allow-shared-secret", "allow-shared-secret-pub-key", "allow-store-unencrypted", "allow-retrieve-unencrypted", "allow-hmac-sha256"]

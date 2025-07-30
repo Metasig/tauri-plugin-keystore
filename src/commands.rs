@@ -106,3 +106,11 @@ pub(crate) async fn shared_secret<R: Runtime> (
         chacha_20_keys,
     })
 }
+
+#[command]
+pub(crate) async fn hmac_sha256<R: Runtime>(
+    app: AppHandle<R>,
+    payload: HmacSha256Request
+) -> crate::Result<HmacSha256Response> {
+    app.keystore().hmac_sha256(payload)
+}

@@ -13,6 +13,7 @@ Default permissions for the plugin
 - `allow-shared-secret-pub-key`
 - `allow-store-unencrypted`
 - `allow-retrieve-unencrypted`
+- `allow-hmac-sha256`
 
 ## Permission Table
 
@@ -71,6 +72,32 @@ Enables the contains_unencrypted_key command without any pre-configured scope.
 <td>
 
 Denies the contains_unencrypted_key command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:allow-hmac-sha256`
+
+</td>
+<td>
+
+Enables the hmac_sha256 command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`keystore:deny-hmac-sha256`
+
+</td>
+<td>
+
+Denies the hmac_sha256 command without any pre-configured scope.
 
 </td>
 </tr>

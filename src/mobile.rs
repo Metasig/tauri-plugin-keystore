@@ -79,5 +79,11 @@ impl<R: Runtime> Keystore<R> {
             .run_mobile_plugin("shared_secret_pub_key", ())
             .map_err(Into::into)
     }
+    
+    pub fn hmac_sha256(&self, payload: HmacSha256Request) -> crate::Result<HmacSha256Response> {
+        self.0
+            .run_mobile_plugin("hmac_sha256", payload)
+            .map_err(Into::into)
+    }
 
 }

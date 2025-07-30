@@ -71,3 +71,17 @@ pub struct ChaChaSharedSecret {
     /// List of ChaCha20 keys in hex format
     pub chacha_20_keys: Vec<String>
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HmacSha256Request {
+    /// Hex encoded input bytes
+    pub input: String
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HmacSha256Response {
+    /// Hex encoded bytes
+    pub output: String
+}

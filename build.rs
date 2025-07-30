@@ -8,6 +8,7 @@ const COMMANDS: &[&str] = &[
     "shared_secret_pub_key",
     "store_unencrypted",
     "retrieve_unencrypted",
+    "hmac_sha256"
 ];
 
 fn main() {

@@ -29,6 +29,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 private const val KEY_ALIAS = "key_alias"
 private const val KEY_AGREEMENT_ALIAS = "key_agreement_alias"
+private const val KEY_HMAC_ALIAS = "key_hmac_alias"
 private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 private const val SHARED_PREFERENCES_NAME = "secure_storage"
 
@@ -62,6 +63,16 @@ class SharedSecretRequest {
 data class SharedSecretResponse(
     val sharedSecrets: List<String>
 )
+
+@InvokeArg
+class Hmac256Request{
+    lateinit var input: String
+}
+
+data class Hmac256Response(
+    val output: String
+)
+
 
 @TauriPlugin
 class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
@@ -180,6 +191,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 // Require authentication on every use:
                 .setUserAuthenticationRequired(true)
+                .setInvalidatedByBiometricEnrollment(false)
                 .setUserAuthenticationValidityDurationSeconds(-1)
                 .build()
             keyGenerator.init(keyGenParameterSpec)
@@ -241,7 +253,31 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                 .build()
 
             keyGenerator.initialize(keyGenParameterSpec)
+            
             keyGenerator.generateKeyPair()
+        }
+    }
+
+    private fun ensureHmacKey() {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
+        keyStore.load(null)
+
+        if (!keyStore.containsAlias(KEY_HMAC_ALIAS)) {
+            val keyGenerator = KeyGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_HMAC_SHA256,
+                ANDROID_KEYSTORE
+            )
+            val parameterSpec = KeyGenParameterSpec.Builder(
+                KEY_HMAC_ALIAS,
+                KeyProperties.PURPOSE_SIGN
+            )
+                // Require authentication on every use:
+                .setUserAuthenticationRequired(true)
+                .setInvalidatedByBiometricEnrollment(false)
+                .setUserAuthenticationValidityDurationSeconds(-1)
+                .build()
+            keyGenerator.init(parameterSpec)
+            keyGenerator.generateKey()
         }
     }
 
@@ -489,6 +525,31 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
             invoke.resolve()
         } catch (e: Exception) {
             invoke.reject("Could not delete entry from KeyStore: ${e.localizedMessage}")
+        }
+    }
+
+    @Command
+    fun hmac_sha256(invoke: Invoke) {
+        try {
+            val request = invoke.parseArgs(Hmac256Request::class.java)
+
+            ensureHmacKey()
+
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
+            keyStore.load(null)
+            val key = keyStore.getKey(KEY_HMAC_ALIAS, null)
+
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(key)
+            val resultBytes = mac.doFinal(request.input.toByteArray())
+
+            val hexOutput = encode(resultBytes)
+
+            val response = Hmac256Response(output = hexOutput)
+            invoke.resolveObject(response)
+        } catch (e: Exception) {
+            Logger.error("hmac_sha256", e.toString(), e)
+            invoke.reject("Failed to compute HMAC-SHA256: ${e.message}")
         }
     }
 }

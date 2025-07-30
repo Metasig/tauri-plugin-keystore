@@ -319,6 +319,18 @@
           "markdownDescription": "Denies the contains_unencrypted_key command without any pre-configured scope."
         },
         {
+          "description": "Enables the hmac_sha256 command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-hmac-sha256",
+          "markdownDescription": "Enables the hmac_sha256 command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the hmac_sha256 command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-hmac-sha256",
+          "markdownDescription": "Denies the hmac_sha256 command without any pre-configured scope."
+        },
+        {
           "description": "Enables the remove command without any pre-configured scope.",
           "type": "string",
           "const": "allow-remove",
@@ -403,10 +415,10 @@
           "markdownDescription": "Denies the store_unencrypted command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-contains-key`\n- `allow-contains-unencrypted-key`\n- `allow-retrieve`\n- `allow-store`\n- `allow-shared-secret`\n- `allow-shared-secret-pub-key`\n- `allow-store-unencrypted`\n- `allow-retrieve-unencrypted`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-contains-key`\n- `allow-contains-unencrypted-key`\n- `allow-retrieve`\n- `allow-store`\n- `allow-shared-secret`\n- `allow-shared-secret-pub-key`\n- `allow-store-unencrypted`\n- `allow-retrieve-unencrypted`\n- `allow-hmac-sha256`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-contains-key`\n- `allow-contains-unencrypted-key`\n- `allow-retrieve`\n- `allow-store`\n- `allow-shared-secret`\n- `allow-shared-secret-pub-key`\n- `allow-store-unencrypted`\n- `allow-retrieve-unencrypted`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-remove`\n- `allow-contains-key`\n- `allow-contains-unencrypted-key`\n- `allow-retrieve`\n- `allow-store`\n- `allow-shared-secret`\n- `allow-shared-secret-pub-key`\n- `allow-store-unencrypted`\n- `allow-retrieve-unencrypted`\n- `allow-hmac-sha256`"
         }
       ]
     }
