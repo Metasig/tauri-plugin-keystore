@@ -76,3 +76,11 @@ export async function sharedSecret(pubKeysHex: string[], salt: string, extraInfo
         },
     });
 }
+
+export async function hmacSha256(input: string): Promise<{output: string} | null> {
+    return await invoke<{output: string}>("plugin:keystore|hmac_sha256", {
+        payload: {
+            input
+        }
+    });
+}
