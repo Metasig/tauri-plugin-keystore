@@ -1,6 +1,6 @@
 {
   "name": "@0x330a/tauri-plugin-keystore-api",
-  "version": "2.1.0-alpha.2",
+  "version": "2.1.0-alpha.3",
   "author": "0x330a",
   "description": "Interact with the device-native key storage (Android Keystore, iOS Keychain). perform ecdh operations for generating symmetric keys",
   "type": "module",
