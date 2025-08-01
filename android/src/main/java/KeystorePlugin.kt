@@ -128,55 +128,63 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         // Get cipher for encryption
         val cipher = getEncryptionCipher()
 
-        // Wrap the Cipher in a CryptoObject.
-        val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+        fun performEncrypt(cipher: Cipher) {
+            // Encrypt the value.
+            val ciphertext =
+                cipher.doFinal(storeRequest.value.toByteArray())
+            val iv = cipher.iv  // Capture the initialization vector.
+            // Store the ciphertext and IV.
+            storeCiphertext(storeRequest.key, iv, ciphertext)
+            Logger.info("Secret stored securely")
+        }
 
-        // Create biometric prompt
-        val executor = ContextCompat.getMainExecutor(activity)
-        val biometricPrompt =
-            BiometricPrompt(
-                activity as androidx.fragment.app.FragmentActivity, executor,
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        super.onAuthenticationSucceeded(result)
-                        try {
-                            // Get the cipher from the authentication result.
-                            val authCipher = result.cryptoObject?.cipher
-                                ?: throw IllegalStateException("Cipher not available after auth")
+        if (BuildConfig.DEBUG) {
+            // don't need to biometric unlock
+            performEncrypt(cipher)
+        } else {
+            // Wrap the Cipher in a CryptoObject.
+            val cryptoObject = BiometricPrompt.CryptoObject(cipher)
 
-                            // Encrypt the value.
-                            val ciphertext =
-                                authCipher.doFinal(storeRequest.value.toByteArray())
-                            val iv = authCipher.iv  // Capture the initialization vector.
-                            // Store the ciphertext and IV.
-                            storeCiphertext(storeRequest.key, iv, ciphertext)
-                            Logger.info("Secret stored securely")
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            Logger.error("Encryption failed: ${e.message}")
+            // Create biometric prompt
+            val executor = ContextCompat.getMainExecutor(activity)
+            val biometricPrompt =
+                BiometricPrompt(
+                    activity as androidx.fragment.app.FragmentActivity, executor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                            super.onAuthenticationSucceeded(result)
+                            try {
+                                // Get the cipher from the authentication result.
+                                val authCipher = result.cryptoObject?.cipher
+                                    ?: throw IllegalStateException("Cipher not available after auth")
+
+                                performEncrypt(authCipher)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                Logger.error("Encryption failed: ${e.message}")
+                            }
+                            invoke.resolve()
                         }
-                    }
 
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        super.onAuthenticationError(errorCode, errString)
-                        invoke.reject("Authentication error: $errorCode")
-                    }
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                            super.onAuthenticationError(errorCode, errString)
+                            invoke.reject("Authentication error: $errorCode")
+                        }
 
-                    override fun onAuthenticationFailed() {
-                        super.onAuthenticationFailed()
-                        invoke.reject("Authentication failed")
-                    }
-                })
+                        override fun onAuthenticationFailed() {
+                            super.onAuthenticationFailed()
+                            invoke.reject("Authentication failed")
+                        }
+                    })
 
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Authenticate to Store Secret")
-            .setSubtitle("Biometric authentication is required")
-            .setNegativeButtonText("Cancel")
-            .build()
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Authenticate to Store Secret")
+                .setSubtitle("Biometric authentication is required")
+                .setNegativeButtonText("Cancel")
+                .build()
 
-        biometricPrompt.authenticate(promptInfo, cryptoObject)
-
-        invoke.resolve()
+            biometricPrompt.authenticate(promptInfo, cryptoObject)
+        }
     }
 
     // Generate key, if it doesn't exist.
