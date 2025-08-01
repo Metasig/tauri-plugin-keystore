@@ -141,6 +141,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         if (BuildConfig.DEBUG) {
             // don't need to biometric unlock
             performEncrypt(cipher)
+            invoke.resolve()
         } else {
             // Wrap the Cipher in a CryptoObject.
             val cryptoObject = BiometricPrompt.CryptoObject(cipher)
