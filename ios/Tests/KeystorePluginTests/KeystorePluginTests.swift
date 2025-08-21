@@ -15,6 +15,6 @@ final class KeystorePluginTests: XCTestCase {
         _ = core.store_unencrypted("hello", value: "world")
         let res = core.retrieve_unencrypted("hello")
         XCTAssertTrue(res.ok)
-        XCTAssertEqual(res.result, "world")
+        XCTAssertEqual(res.data, "world")
     }
 }
