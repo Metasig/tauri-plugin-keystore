@@ -1,5 +1,4 @@
-
-// swift-tools-version: 5.10
+// swift-tools-version:5.9
 import PackageDescription
 
 let package = Package(
@@ -8,20 +7,10 @@ let package = Package(
         .iOS(.v17)
     ],
     products: [
-        .library(
-            name: "KeystorePlugin",
-            targets: ["KeystorePlugin"]
-        )
+        .library(name: "KeystorePlugin", targets: ["KeystorePlugin"])
     ],
     targets: [
-        .target(
-            name: "KeystorePlugin",
-            path: "Sources/KeystorePlugin"
-        ),
-        .testTarget(
-            name: "KeystorePluginTests",
-            dependencies: ["KeystorePlugin"],
-            path: "Tests/KeystorePluginTests"
-        )
+        .target(name: "KeystorePlugin", path: "Sources/KeystorePlugin"),
+        .testTarget(name: "KeystorePluginTests", dependencies: ["KeystorePlugin"], path: "Tests/KeystorePluginTests")
     ]
 )

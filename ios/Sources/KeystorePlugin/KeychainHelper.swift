@@ -13,7 +13,6 @@ final class KeychainHelper {
     static let service = "com.0x330a.tauri.keystore"
 
     static func saveGenericPassword(account: String, data: Data, access: SecAccessControl) throws {
-        // Delete if exists
         _ = try? deleteGenericPassword(account: account)
 
         let query: [String: Any] = [
@@ -58,15 +57,12 @@ final class KeychainHelper {
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any
         ]
         let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess else {
+        guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unhandledOSStatus(status)
         }
     }
 
-    // MARK: - Secure Enclave P-256 Private Key
-
     static func createOrLoadSecureEnclavePrivateKey(tag: Data, access: SecAccessControl) throws -> SecKey {
-        // Try load existing
         if let existing = try? loadPrivateKey(tag: tag, context: nil) {
             return existing
         }
