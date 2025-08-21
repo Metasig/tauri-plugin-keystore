@@ -1,8 +1,7 @@
-
-import Foundation
 import CryptoKit
-import Security
+import Foundation
 import LocalAuthentication
+import Security
 
 public struct KeystoreResult<T: Encodable>: Encodable {
     public let ok: Bool
@@ -15,6 +14,7 @@ public struct KeystoreResult<T: Encodable>: Encodable {
     }
 }
 
+@available(iOS 17, *)
 public final class KeystoreCore {
     public static let shared = KeystoreCore()
     private let securePrefs = UserDefaults(suiteName: "secure_storage")!
@@ -67,15 +67,18 @@ public final class KeystoreCore {
     public func retrieve(_ key: String) -> KeystoreResult<String?> {
         do {
             guard let ivB64 = securePrefs.string(forKey: "iv-\(key)"),
-                  let ctB64 = securePrefs.string(forKey: "ciphertext-\(key)"),
-                  let iv = Data(base64Encoded: ivB64),
-                  let ct = Data(base64Encoded: ctB64) else {
+                let ctB64 = securePrefs.string(forKey: "ciphertext-\(key)"),
+                let iv = Data(base64Encoded: ivB64),
+                let ct = Data(base64Encoded: ctB64)
+            else {
                 return KeystoreResult(ok: true, data: nil)
             }
             let ctx = LAContext()
             ctx.localizedReason = "Unlock to access encryption key"
             let encKey = try loadOrCreateSymmetricKey(account: symEncAccount, context: ctx)
-            guard iv.count == 12 else { return KeystoreResult(ok: false, data: nil, error: "bad_iv_length") }
+            guard iv.count == 12 else {
+                return KeystoreResult(ok: false, data: nil, error: "bad_iv_length")
+            }
             let nonce = try AES.GCM.Nonce(data: iv)
             let ctOnly = ct.prefix(ct.count - 16)
             let tag = ct.suffix(16)
@@ -132,14 +135,21 @@ public final class KeystoreCore {
                 let attrs: [String: Any] = [
                     kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
                     kSecAttrKeyClass as String: kSecAttrKeyClassPublic,
-                    kSecAttrKeySizeInBits as String: 256
+                    kSecAttrKeySizeInBits as String: 256,
                 ]
                 var err: Unmanaged<CFError>?
-                guard let peerKey = SecKeyCreateWithData(peerX963 as CFData, attrs as CFDictionary, &err) else {
+                guard
+                    let peerKey = SecKeyCreateWithData(
+                        peerX963 as CFData, attrs as CFDictionary, &err)
+                else {
                     throw err!.takeRetainedValue() as Error
                 }
                 var error: Unmanaged<CFError>?
-                guard let secret = SecKeyCopyKeyExchangeResult(priv, SecKeyAlgorithm.ecdhKeyExchangeStandard, peerKey, [:] as CFDictionary, &error) as Data? else {
+                guard
+                    let secret = SecKeyCopyKeyExchangeResult(
+                        priv, SecKeyAlgorithm.ecdhKeyExchangeStandard, peerKey, [:] as CFDictionary,
+                        &error) as Data?
+                else {
                     throw error!.takeRetainedValue() as Error
                 }
                 results.append(dataToHex(secret))
@@ -152,8 +162,12 @@ public final class KeystoreCore {
 
     // Internals
 
-    private func loadOrCreateSymmetricKey(account: String, context: LAContext?) throws -> SymmetricKey {
-        if let data = try? KeychainHelper.retrieveGenericPassword(account: account, context: context) {
+    private func loadOrCreateSymmetricKey(account: String, context: LAContext?) throws
+        -> SymmetricKey
+    {
+        if let data = try? KeychainHelper.retrieveGenericPassword(
+            account: account, context: context)
+        {
             return SymmetricKey(data: data)
         }
         let key = SymmetricKey(size: .bits256)
@@ -174,7 +188,10 @@ public final class KeystoreCore {
             flags.insert(.privateKeyUsage)
         }
         var error: Unmanaged<CFError>?
-        guard let ac = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, flags, &error) else {
+        guard
+            let ac = SecAccessControlCreateWithFlags(
+                nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, flags, &error)
+        else {
             throw error!.takeRetainedValue() as Error
         }
         return ac
