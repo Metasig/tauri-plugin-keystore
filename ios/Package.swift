@@ -2,15 +2,26 @@
 import PackageDescription
 
 let package = Package(
-    name: "KeystorePlugin",
+    name: "tauri-plugin-keystore",
     platforms: [
         .iOS(.v17)
     ],
     products: [
-        .library(name: "KeystorePlugin", targets: ["KeystorePlugin"])
+        .library(
+            name: "tauri-plugin-keystore",
+            type: .static,
+            targets: ["tauri-plugin-keystore"]),
     ],
     targets: [
-        .target(name: "KeystorePlugin", path: "Sources/KeystorePlugin"),
-        .testTarget(name: "KeystorePluginTests", dependencies: ["KeystorePlugin"], path: "Tests/KeystorePluginTests")
+        .target(
+            name: "tauri-plugin-keystore",
+            dependencies: [
+                .byName(name: "Tauri")
+            ],
+            path: "Sources/KeystorePlugin"),
+        .testTarget(
+            name: "KeystorePluginTests",
+            dependencies: ["tauri-plugin-keystore"],
+            path: "Tests/KeystorePluginTests")
     ]
 )
