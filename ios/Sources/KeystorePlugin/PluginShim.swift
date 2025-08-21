@@ -69,11 +69,10 @@ public class KeystorePlugin: Plugin {
 }
 
 @_cdecl("init_plugin_keystore")
-public func initPluginKeystore() -> UnsafeMutableRawPointer? {
-    let plugin = KeystorePlugin()
-    let unmanaged = Unmanaged.passRetained(plugin)
-    return UnsafeMutableRawPointer(unmanaged.toOpaque())
+func initPlugin() -> Plugin {
+  return KeystorePlugin()
 }
+
 #else
 @_cdecl("init_plugin_keystore")
 public func initPluginKeystore() -> UnsafeMutableRawPointer? {
