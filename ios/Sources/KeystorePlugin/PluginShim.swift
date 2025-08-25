@@ -27,56 +27,56 @@ public class KeystorePlugin: Plugin {
     /// contains_key(key: String) -> Bool
     @objc public func contains_key(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.contains_key(args.key))
     }
 
     /// contains_unencrypted_key(key: String) -> Bool
     @objc public func contains_unencrypted_key(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.contains_unencrypted_key(args.key))
     }
 
     /// store_unencrypted(key: String, value: String) -> Bool
     @objc public func store_unencrypted(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String; let value: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.store_unencrypted(args.key, value: args.value))
     }
 
     /// retrieve_unencrypted(key: String) -> String?
     @objc public func retrieve_unencrypted(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.retrieve_unencrypted(args.key))
     }
 
     /// store(key: String, plaintext: String) -> Bool
     @objc public func store(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String; let plaintext: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.store(args.key, plaintext: args.plaintext))
     }
 
     /// retrieve(key: String) -> String?
     @objc public func retrieve(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.retrieve(args.key))
     }
 
     /// remove(key: String) -> Bool
     @objc public func remove(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.remove(args.key))
     }
 
     /// hmac_sha256(message: String) -> hex String
     @objc public func hmac_sha256(_ invoke: Invoke) throws {
         struct Args: Decodable { let message: String }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.hmac_sha256(args.message))
     }
 
@@ -89,7 +89,7 @@ public class KeystorePlugin: Plugin {
     /// shared_secret(withP256PubKeys: [String]) -> [hex String]
     @objc public func shared_secret(_ invoke: Invoke) throws {
         struct Args: Decodable { let withP256PubKeys: [String] }
-        guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
         invoke.resolve(core.shared_secret(args.withP256PubKeys))
     }
 }
