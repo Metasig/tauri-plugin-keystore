@@ -10,7 +10,8 @@ enum KeychainError: Error {
 }
 
 final class KeychainHelper {
-    static let service = "com.0x330a.tauri.keystore"
+    static let service = "app.tauri.keystore"
+    static let account = ""
 
     static func saveGenericPassword(account: String, data: Data, access: SecAccessControl) throws {
         _ = try? deleteGenericPassword(account: account)
