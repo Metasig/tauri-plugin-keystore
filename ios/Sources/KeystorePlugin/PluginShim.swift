@@ -1,12 +1,11 @@
 
 import Foundation
-
 #if canImport(Tauri)
 import Tauri
 import SwiftRs
+#endif
 
-@objc(KeystorePlugin)
-public class KeystorePlugin: Plugin {
+class KeystorePlugin: Plugin {
     private let core = KeystoreCore.shared
 
     // MARK: - Helpers
@@ -28,6 +27,7 @@ public class KeystorePlugin: Plugin {
     @objc public func contains_key(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.contains_key(args.key))
     }
 
@@ -35,6 +35,7 @@ public class KeystorePlugin: Plugin {
     @objc public func contains_unencrypted_key(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.contains_unencrypted_key(args.key))
     }
 
@@ -42,6 +43,7 @@ public class KeystorePlugin: Plugin {
     @objc public func store_unencrypted(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String; let value: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.store_unencrypted(args.key, value: args.value))
     }
 
@@ -49,6 +51,7 @@ public class KeystorePlugin: Plugin {
     @objc public func retrieve_unencrypted(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.retrieve_unencrypted(args.key))
     }
 
@@ -56,6 +59,7 @@ public class KeystorePlugin: Plugin {
     @objc public func store(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String; let plaintext: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.store(args.key, plaintext: args.plaintext))
     }
 
@@ -63,6 +67,7 @@ public class KeystorePlugin: Plugin {
     @objc public func retrieve(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.retrieve(args.key))
     }
 
@@ -70,6 +75,7 @@ public class KeystorePlugin: Plugin {
     @objc public func remove(_ invoke: Invoke) throws {
         struct Args: Decodable { let key: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.remove(args.key))
     }
 
@@ -77,6 +83,7 @@ public class KeystorePlugin: Plugin {
     @objc public func hmac_sha256(_ invoke: Invoke) throws {
         struct Args: Decodable { let message: String }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.hmac_sha256(args.message))
     }
 
@@ -90,6 +97,7 @@ public class KeystorePlugin: Plugin {
     @objc public func shared_secret(_ invoke: Invoke) throws {
         struct Args: Decodable { let withP256PubKeys: [String] }
         //guard let args: Args = parseOrReject(Args.self, invoke) else { return }
+        let args: Args
         invoke.resolve(core.shared_secret(args.withP256PubKeys))
     }
 }
@@ -100,9 +108,3 @@ public func initPluginKeystore() -> UnsafeMutableRawPointer? {
     let unmanaged = Unmanaged.passRetained(plugin)
     return UnsafeMutableRawPointer(unmanaged.toOpaque())
 }
-#else
-@_cdecl("init_plugin_keystore")
-public func initPluginKeystore() -> UnsafeMutableRawPointer? {
-    return nil
-}
-#endif
