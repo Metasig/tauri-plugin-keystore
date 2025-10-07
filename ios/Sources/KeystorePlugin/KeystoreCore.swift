@@ -14,7 +14,7 @@ public struct KeystoreResult<T: Encodable>: Encodable {
     }
 }
 
-@available(iOS 17, *)
+@available(iOS 15, *)
 public final class KeystoreCore {
     public static let shared = KeystoreCore()
     private let securePrefs = UserDefaults(suiteName: "secure_storage")!
