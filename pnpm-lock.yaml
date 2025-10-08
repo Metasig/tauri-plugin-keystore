@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@noble/curves':
+        specifier: ^1.9.0
+        version: 1.9.0
       '@tauri-apps/api':
         specifier: '>=2.0.0-beta.6'
         version: 2.2.0
@@ -26,6 +29,14 @@ importers:
         version: 5.7.3
 
 packages:
+
+  '@noble/curves@1.9.0':
+    resolution: {integrity: sha512-7YDlXiNMdO1YZeH6t/kvopHHbIZzlxrCV9WLqCY6QhcXOoXiNCMDqJIglZ9Yjx5+w7Dz30TITFrlTjnRg7sKEg==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@rollup/plugin-typescript@11.1.6':
     resolution: {integrity: sha512-R92yOmIACgYdJ7dJ97p4K69I8gg6IEHt8M7dUBxN3W6nrO8uUxX5ixl0yU/N3aZTi8WhPuICvOHXQvF6FaykAA==}
@@ -199,6 +210,12 @@ packages:
     hasBin: true
 
 snapshots:
+
+  '@noble/curves@1.9.0':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
+  '@noble/hashes@1.8.0': {}
 
   '@rollup/plugin-typescript@11.1.6(rollup@4.34.6)(tslib@2.8.1)(typescript@5.7.3)':
     dependencies:

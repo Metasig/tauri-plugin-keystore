@@ -3,47 +3,120 @@ package app.tauri.keystore
 import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
-//import android.hardware.biometrics.BiometricPrompt
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import android.webkit.WebView
 import androidx.biometric.BiometricPrompt
-import java.security.KeyStore
+import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import app.tauri.BuildConfig
+import app.tauri.Logger
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
-import app.tauri.Logger
-import android.util.Base64
+import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
-import app.tauri.plugin.Invoke
-import java.util.Enumeration
-import javax.crypto.KeyGenerator
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import androidx.core.content.ContextCompat
-import java.nio.charset.Charset
-import javax.crypto.Cipher
-import javax.crypto.SecretKey
+import org.komputing.khex.encode
+import java.math.BigInteger
+import java.security.*
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.ECParameterSpec
+import java.security.spec.ECPoint
+import java.security.spec.ECPublicKeySpec
+import javax.crypto.*
 import javax.crypto.spec.GCMParameterSpec
 
-private const val KEY_ALIAS = "unime_dev"
+private const val KEY_ALIAS = "key_alias"
+private const val KEY_AGREEMENT_ALIAS = "key_agreement_alias"
+private const val KEY_HMAC_ALIAS = "key_hmac_alias"
 private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 private const val SHARED_PREFERENCES_NAME = "secure_storage"
 
+class KeystoreConfig @JvmOverloads constructor(val unencryptedStoreName: String = "unencrypted")
+
 @InvokeArg
 class StoreRequest {
+    lateinit var key: String
     lateinit var value: String
-    // TODO: use this instead?
-    // var value: String? = null
 }
 
 @InvokeArg
 class RetrieveRequest {
-    lateinit var service: String
-    lateinit var user: String
+    lateinit var key: String
 }
+
+data class RetrieveResponse(
+    val value: String?
+)
+
+@InvokeArg
+class RemoveRequest {
+    lateinit var key: String
+}
+
+@InvokeArg
+class SharedSecretRequest {
+    lateinit var withP256PubKeys: List<String>
+}
+
+data class SharedSecretResponse(
+    val sharedSecrets: List<String>
+)
+
+@InvokeArg
+class Hmac256Request {
+    lateinit var input: String
+}
+
+data class Hmac256Response(
+    val output: String
+)
+
 
 @TauriPlugin
 class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
-    private val implementation = Example()
+
+    lateinit var unencryptedStoreName: String
+
+
+    override fun load(webView: WebView) {
+        super.load(webView)
+        getConfig(KeystoreConfig::class.java).let { config ->
+            unencryptedStoreName = config.unencryptedStoreName ?: "unencrypted_store"
+        }
+    }
+
+    @Command
+    fun contains_key(invoke: Invoke) {
+        val key = invoke.parseArgs(RetrieveRequest::class.java).key
+        val prefs = activity.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        invoke.resolveObject(prefs.contains("ciphertext-$key"))
+    }
+
+    @Command
+    fun contains_unencrypted_key(invoke: Invoke) {
+        val key = invoke.parseArgs(RetrieveRequest::class.java).key
+        invoke.resolveObject(activity.getSharedPreferences(unencryptedStoreName, Context.MODE_PRIVATE).contains(key))
+    }
+
+
+    @Command
+    fun store_unencrypted(invoke: Invoke) {
+        val args = invoke.parseArgs(StoreRequest::class.java)
+        activity.getSharedPreferences(unencryptedStoreName, Context.MODE_PRIVATE).edit {
+            putString(args.key, args.value)
+        }
+        invoke.resolve()
+    }
+
+    @Command
+    fun retrieve_unencrypted(invoke: Invoke) {
+        val args = invoke.parseArgs(RetrieveRequest::class.java)
+        val value = activity.getSharedPreferences(unencryptedStoreName, Context.MODE_PRIVATE).getString(args.key, null)
+        invoke.resolveObject(RetrieveResponse(value))
+    }
 
     @Command
     fun store(invoke: Invoke) {
@@ -55,88 +128,64 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         // Get cipher for encryption
         val cipher = getEncryptionCipher()
 
-        // Wrap the Cipher in a CryptoObject.
-        val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+        fun performEncrypt(cipher: Cipher) {
+            // Encrypt the value.
+            val ciphertext =
+                cipher.doFinal(storeRequest.value.toByteArray())
+            val iv = cipher.iv  // Capture the initialization vector.
+            // Store the ciphertext and IV.
+            storeCiphertext(storeRequest.key, iv, ciphertext)
+            Logger.info("Secret stored securely")
+        }
 
-        // Create biometric prompt
-        val executor = ContextCompat.getMainExecutor(activity)
-        val biometricPrompt =
-            BiometricPrompt(activity as androidx.fragment.app.FragmentActivity, executor,
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        super.onAuthenticationSucceeded(result)
-                        try {
-                            // Get the cipher from the authentication result.
-                            val authCipher = result.cryptoObject?.cipher
-                                ?: throw IllegalStateException("Cipher not available after auth")
+        if (BuildConfig.DEBUG) {
+            // don't need to biometric unlock
+            performEncrypt(cipher)
+            invoke.resolve()
+        } else {
+            // Wrap the Cipher in a CryptoObject.
+            val cryptoObject = BiometricPrompt.CryptoObject(cipher)
 
-                            // Encrypt the value.
-                            val ciphertext =
-                                authCipher.doFinal(storeRequest.value.toByteArray(Charset.forName("UTF-8")))
-                            val iv = authCipher.iv  // Capture the initialization vector.
+            // Create biometric prompt
+            val executor = ContextCompat.getMainExecutor(activity)
+            val biometricPrompt =
+                BiometricPrompt(
+                    activity as androidx.fragment.app.FragmentActivity, executor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                            super.onAuthenticationSucceeded(result)
+                            try {
+                                // Get the cipher from the authentication result.
+                                val authCipher = result.cryptoObject?.cipher
+                                    ?: throw IllegalStateException("Cipher not available after auth")
 
-                            // Store the ciphertext and IV.
-                            storeCiphertext(iv, ciphertext)
-                            Logger.info("Secret stored securely")
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            Logger.error("Encryption failed: ${e.message}")
+                                performEncrypt(authCipher)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                Logger.error("Encryption failed: ${e.message}")
+                            }
+                            invoke.resolve()
                         }
-                    }
 
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        super.onAuthenticationError(errorCode, errString)
-                        invoke.reject("Authentication error: $errorCode")
-                    }
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                            super.onAuthenticationError(errorCode, errString)
+                            invoke.reject("Authentication error: $errorCode")
+                        }
 
-                    override fun onAuthenticationFailed() {
-                        super.onAuthenticationFailed()
-                        invoke.reject("Authentication failed")
-                    }
-                })
+                        override fun onAuthenticationFailed() {
+                            super.onAuthenticationFailed()
+                            invoke.reject("Authentication failed")
+                        }
+                    })
 
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Authenticate to Store Secret")
-            .setSubtitle("Biometric authentication is required")
-            .setNegativeButtonText("Cancel")
-            .build()
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Authenticate to Store Secret")
+                .setSubtitle("Biometric authentication is required")
+                .setNegativeButtonText("Cancel")
+                .build()
 
-        biometricPrompt.authenticate(promptInfo, cryptoObject)
-
-        // Unlock
-//        val spec = javax.crypto.spec.GCMParameterSpec(123, iv)
-//        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
-
-//        val biometricPrompt = BiometricPrompt(
-//            activity as androidx.fragment.app.FragmentActivity,
-//            object : BiometricPrompt.AuthenticationCallback() {
-//                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-//                    super.onAuthenticationSucceeded(result)
-//                    try {
-//                        // Use the cipher from the CryptoObject to decrypt the ciphertext.
-//                        val decryptedBytes = result.cryptoObject?.cipher?.doFinal(ciphertext)
-//                        val password = decryptedBytes?.toString(StandardCharsets.UTF_8)
-//                        if (password != null) {
-//                            onDecrypted(password)
-//                        } else {
-//                            onError("Decryption failed")
-//                        }
-//                    } catch (e: Exception) {
-//                        onError("Decryption exception: ${e.message}")
-//                    }
-//                }
-//                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-//                    super.onAuthenticationError(errorCode, errString)
-//                    onError("Authentication error: $errString")
-//                }
-//                override fun onAuthenticationFailed() {
-//                    super.onAuthenticationFailed()
-//                    onError("Authentication failed")
-//                }
-//            }
-//        )
-
-        invoke.resolve()
+            biometricPrompt.authenticate(promptInfo, cryptoObject)
+        }
     }
 
     // Generate key, if it doesn't exist.
@@ -152,7 +201,8 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 // Require authentication on every use:
-                .setUserAuthenticationRequired(true)
+                .setUserAuthenticationRequired(!BuildConfig.DEBUG)
+                .setInvalidatedByBiometricEnrollment(false)
                 .setUserAuthenticationValidityDurationSeconds(-1)
                 .build()
             keyGenerator.init(keyGenParameterSpec)
@@ -160,40 +210,257 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    fun getPublicKeyFromHex(hexPublicKey: String): PublicKey {
+        // Handle uncompressed format (starting with 04)
+        if (hexPublicKey.startsWith("04")) {
+            val hexString = hexPublicKey.substring(2) // Remove "04" prefix
+            val coordinateLength = hexString.length / 2
+
+            // Extract x and y coordinates (each should be 64 chars for secp256r1)
+            val xHex = hexString.substring(0, coordinateLength)
+            val yHex = hexString.substring(coordinateLength)
+
+            val x = BigInteger(xHex, 16)
+            val y = BigInteger(yHex, 16)
+
+            // Create EC point
+            val ecPoint = ECPoint(x, y)
+
+            // Get secp256r1 parameters
+            val params = AlgorithmParameters.getInstance("EC")
+            params.init(ECGenParameterSpec("secp256r1"))
+            val ecParameterSpec = params.getParameterSpec(ECParameterSpec::class.java)
+
+            // Create public key spec and generate the public key
+            val pubKeySpec = ECPublicKeySpec(ecPoint, ecParameterSpec)
+            val keyFactory = KeyFactory.getInstance("EC")
+            return keyFactory.generatePublic(pubKeySpec)
+        }
+        // Handle compressed format (starting with 02 or 03)
+        else if (hexPublicKey.startsWith("02") || hexPublicKey.startsWith("03")) {
+            // This requires point decompression which is more complex
+            // Consider using Bouncy Castle for this
+            throw IllegalArgumentException("Compressed keys not supported in this simple implementation")
+        } else {
+            throw IllegalArgumentException("Invalid public key format")
+        }
+    }
+
+    private fun ensureP256Key() {
+        val keystore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        if (!keystore.containsAlias(KEY_AGREEMENT_ALIAS)) {
+            val keyGenerator =
+                KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, ANDROID_KEYSTORE)
+
+            val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+                KEY_AGREEMENT_ALIAS,
+                // do all of the above (sign internal for verifying key integrity)
+                KeyProperties.PURPOSE_AGREE_KEY or
+                        KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+            )
+                .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .build()
+
+            keyGenerator.initialize(keyGenParameterSpec)
+
+            keyGenerator.generateKeyPair()
+        }
+    }
+
+    private fun ensureHmacKey() {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
+        keyStore.load(null)
+
+        if (!keyStore.containsAlias(KEY_HMAC_ALIAS)) {
+            val keyGenerator = KeyGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_HMAC_SHA256,
+                ANDROID_KEYSTORE
+            )
+            val parameterSpec = KeyGenParameterSpec.Builder(
+                KEY_HMAC_ALIAS,
+                KeyProperties.PURPOSE_SIGN
+            )
+                // Require authentication on every use:
+                .setUserAuthenticationRequired(!BuildConfig.DEBUG)
+                .setInvalidatedByBiometricEnrollment(false)
+                .setUserAuthenticationValidityDurationSeconds(-1)
+                .build()
+            keyGenerator.init(parameterSpec)
+            keyGenerator.generateKey()
+        }
+    }
+
+    @Command
+    fun shared_secret_pub_key(invoke: Invoke) {
+        // ensure we have generated the key
+        ensureP256Key()
+
+        try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            val certificate = keyStore.getCertificate(KEY_AGREEMENT_ALIAS)
+            val publicKey = certificate.publicKey
+
+            // Convert public key to uncompressed format (04 + x + y)
+            val ecPublicKey = publicKey as java.security.interfaces.ECPublicKey
+            val x = ecPublicKey.w.affineX
+            val y = ecPublicKey.w.affineY
+
+            // Convert to hex string with 04 prefix (uncompressed format)
+            val xHex = x.toString(16).padStart(64, '0')
+            val yHex = y.toString(16).padStart(64, '0')
+            val pubKeyHex = "04$xHex$yHex"
+
+            // Return the public key
+            val response = JSObject()
+            response.put("pubKey", pubKeyHex)
+            invoke.resolve(response)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            invoke.reject("Failed to get public key: ${e.message}")
+        }
+    }
+
+    @Command
+    fun shared_secret(invoke: Invoke) {
+        val params = invoke.parseArgs(SharedSecretRequest::class.java)
+
+        // ensure we have generated the key
+        ensureP256Key()
+        val signature = getSignature()
+        Logger.debug("initiated cryptoObject")
+
+        fun performSharedSecret() {
+            // Get the Signature from the authentication result.
+            val authSig = signature
+
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            val certificate = keyStore.getCertificate(KEY_AGREEMENT_ALIAS)
+
+            // generate a random message
+            val message = SecureRandom.getSeed(32)
+            // update and output the signature previously initialized for signing
+            authSig.update(message)
+            val outputSig = authSig.sign()
+            Logger.debug("signed message")
+
+            // init in verify mode and check the signature matches the key agreement certificate
+            authSig.initVerify(certificate)
+            Logger.debug("initVerify success")
+            authSig.update(message)
+            authSig.verify(outputSig)
+
+
+            // generate the shared secrets from agreement
+            val agreement = getAgreement()
+            val sharedSecrets = mutableListOf<String>()
+
+            // Process each public key
+            for (pubKey in params.withP256PubKeys) {
+                agreement.init(keyStore.getKey(KEY_AGREEMENT_ALIAS, null))
+                agreement.doPhase(getPublicKeyFromHex(pubKey), true)
+                val secret = agreement.generateSecret()
+                sharedSecrets.add(encode(secret, prefix = ""))
+            }
+
+            invoke.resolveObject(SharedSecretResponse(sharedSecrets))
+        }
+
+        if (BuildConfig.DEBUG) {
+            // expect we don't need a biometric prompt
+            performSharedSecret()
+        } else {
+            // Create biometric prompt
+            val executor = ContextCompat.getMainExecutor(activity)
+            val biometricPrompt =
+                BiometricPrompt(
+                    activity as androidx.fragment.app.FragmentActivity, executor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                            super.onAuthenticationSucceeded(result)
+                            try {
+                                performSharedSecret()
+                            } catch (e: Exception) {
+                                invoke.reject("Shared secret failed: ${e.message}")
+                            }
+                        }
+
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                            super.onAuthenticationError(errorCode, errString)
+                            invoke.reject("Authentication error: $errorCode")
+                        }
+
+                        override fun onAuthenticationFailed() {
+                            super.onAuthenticationFailed()
+                            invoke.reject("Authentication failed")
+                        }
+                    })
+
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Authenticate to Compute Shared Secret")
+                .setSubtitle("Biometric authentication is required")
+                .setNegativeButtonText("Cancel")
+                .build()
+
+            try {
+                biometricPrompt.authenticate(promptInfo)
+            } catch (e: Error) {
+                Logger.error("couldn't start biometric?: ${e.message}")
+            }
+        }
+    }
+
+    private fun getAgreement(): KeyAgreement {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+
+        val privateKey = keyStore.getKey(KEY_AGREEMENT_ALIAS, null)
+        val keyAgreement = KeyAgreement.getInstance("ECDH")
+        keyAgreement.init(privateKey)
+
+        return keyAgreement
+    }
+
+    private fun getSignature(): Signature {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+
+        val secretKey = keyStore.getKey(KEY_AGREEMENT_ALIAS, null)
+
+        val sig = Signature.getInstance("SHA256withECDSA")
+        Logger.debug("initializing signing...")
+        sig.initSign(secretKey as PrivateKey)
+        Logger.debug("initialized signing!")
+        return sig
+    }
+
     // Prepares and returns a Cipher instance for encryption using the key from the Keystore.
     private fun getEncryptionCipher(): Cipher {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
-        // ######## TODO: remove
-        val aliases: Enumeration<String> = keyStore.aliases()
-        Logger.warn("########## aliases:", aliases.toList().joinToString())
-        // ###############
-
-        val secretKey = keyStore.getKey(KEY_ALIAS, null) as SecretKey
+        val secretKey = keyStore.getKey(KEY_ALIAS, null)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         return cipher
     }
 
     // Stores the IV and ciphertext in SharedPreferences.
-    private fun storeCiphertext(iv: ByteArray, ciphertext: ByteArray) {
+    private fun storeCiphertext(key: String, iv: ByteArray, ciphertext: ByteArray) {
         val prefs: SharedPreferences =
             activity.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
-        val editor = prefs.edit()
         val ivEncoded = Base64.encodeToString(iv, Base64.DEFAULT)
         val ctEncoded = Base64.encodeToString(ciphertext, Base64.DEFAULT)
-        editor.putString("iv", ivEncoded)
-        editor.putString("ciphertext", ctEncoded)
-        editor.apply()
+        prefs.edit {
+            putString("iv-$key", ivEncoded)
+            putString("ciphertext-$key", ctEncoded)
+        }
     }
 
     @Command
     fun retrieve(invoke: Invoke) {
         val args = invoke.parseArgs(RetrieveRequest::class.java)
 
-        val cipherData = readCipherData()
+        val cipherData = readCipherData(args.key)
         if (cipherData == null) {
-            invoke.reject("No cipher data found in SharedPreferences", "001")
+            invoke.resolve(JSObject("{value: null}"))
             return
         }
 
@@ -206,54 +473,66 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
 
-        val executor = ContextCompat.getMainExecutor(activity)
-        val biometricPrompt = BiometricPrompt(activity as androidx.fragment.app.FragmentActivity, executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    try {
-                        // Use the cipher from the authentication result (which is now unlocked).
-                        val authCipher = result.cryptoObject?.cipher
-                            ?: throw IllegalStateException("Cipher not available after authentication")
-                        val decryptedBytes = authCipher.doFinal(ciphertext)
-                        val cleartext = String(decryptedBytes, Charset.forName("UTF-8"))
+        // Assume cipher is initialized and unlocked if biometric
+        fun performDecrypt(cipher: Cipher) {
+            // Use the cipher from the authentication result (which is now unlocked).
+            val decryptedBytes = cipher.doFinal(ciphertext)
+            val cleartext = String(decryptedBytes)
 
-                        val ret = JSObject()
-                        ret.put("value", cleartext)
-                        invoke.resolve(ret)
-                    } catch (e: Exception) {
-                        invoke.reject("Decryption failed: ${e.message}")
+            val ret = JSObject()
+            ret.put("value", cleartext)
+            invoke.resolve(ret)
+        }
+
+
+        if (BuildConfig.DEBUG) {
+            performDecrypt(cipher)
+        } else {
+            val executor = ContextCompat.getMainExecutor(activity)
+            val biometricPrompt = BiometricPrompt(
+                activity as androidx.fragment.app.FragmentActivity, executor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        super.onAuthenticationSucceeded(result)
+                        try {
+                            // Use the cipher from the authentication result (which is now unlocked).
+                            val authCipher = result.cryptoObject?.cipher
+                                ?: throw IllegalStateException("Cipher not available after authentication")
+                            performDecrypt(authCipher)
+                        } catch (e: Exception) {
+                            invoke.reject("Decryption failed: $e")
+                        }
                     }
-                }
 
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    super.onAuthenticationError(errorCode, errString)
-                    invoke.reject("Authentication error: $errorCode")
-                }
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        super.onAuthenticationError(errorCode, errString)
+                        invoke.reject("Authentication error: $errorCode")
+                    }
 
-                override fun onAuthenticationFailed() {
-                    super.onAuthenticationFailed()
-                    invoke.reject("Authentication failed")
-                }
-            })
+                    override fun onAuthenticationFailed() {
+                        super.onAuthenticationFailed()
+                        invoke.reject("Authentication failed")
+                    }
+                })
 
-        // Build the prompt info.
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Biometric Authentication")
-            .setSubtitle("Authenticate to decrypt your secret")
-            .setNegativeButtonText("Cancel")
-            .build()
+            // Build the prompt info.
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Biometric Authentication")
+                .setSubtitle("Authenticate to decrypt your secret")
+                .setNegativeButtonText("Cancel")
+                .build()
 
-        // Launch the biometric prompt.
-        biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
+            // Launch the biometric prompt.
+            biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
+        }
     }
 
     // Reads the IV and ciphertext from SharedPreferences.
-    private fun readCipherData(): Pair<ByteArray, ByteArray>? {
+    private fun readCipherData(key: String): Pair<ByteArray, ByteArray>? {
         val prefs: SharedPreferences =
             activity.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
-        val ivEncoded: String? = prefs.getString("iv", null)
-        val ctEncoded: String? = prefs.getString("ciphertext", null)
+        val ivEncoded: String? = prefs.getString("iv-$key", null)
+        val ctEncoded: String? = prefs.getString("ciphertext-$key", null)
         if (ivEncoded == null || ctEncoded == null) {
             return null
         }
@@ -266,19 +545,43 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         val secretKey = keyStore.getKey(KEY_ALIAS, null) as SecretKey
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        val spec = GCMParameterSpec(128, iv)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
         return cipher
     }
 
     @Command
     fun remove(invoke: Invoke) {
+        val request = invoke.parseArgs(RemoveRequest::class.java)
         try {
-            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-            keyStore.deleteEntry(KEY_ALIAS)
+
             invoke.resolve()
         } catch (e: Exception) {
             invoke.reject("Could not delete entry from KeyStore: ${e.localizedMessage}")
+        }
+    }
+
+    @Command
+    fun hmac_sha256(invoke: Invoke) {
+        try {
+            val request = invoke.parseArgs(Hmac256Request::class.java)
+
+            ensureHmacKey()
+
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
+            keyStore.load(null)
+            val key = keyStore.getKey(KEY_HMAC_ALIAS, null)
+
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(key)
+            val resultBytes = mac.doFinal(request.input.toByteArray())
+
+            val hexOutput = encode(resultBytes)
+
+            val response = Hmac256Response(output = hexOutput)
+            invoke.resolveObject(response)
+        } catch (e: Exception) {
+            Logger.error("hmac_sha256", e.toString(), e)
+            invoke.reject("Failed to compute HMAC-SHA256: ${e.message}")
         }
     }
 }

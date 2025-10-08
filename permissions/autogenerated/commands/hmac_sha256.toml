@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-hmac-sha256"
+description = "Enables the hmac_sha256 command without any pre-configured scope."
+commands.allow = ["hmac_sha256"]
+
+[[permission]]
+identifier = "deny-hmac-sha256"
+description = "Denies the hmac_sha256 command without any pre-configured scope."
+commands.deny = ["hmac_sha256"]

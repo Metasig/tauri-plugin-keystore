@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-store-unencrypted"
+description = "Enables the store_unencrypted command without any pre-configured scope."
+commands.allow = ["store_unencrypted"]
+
+[[permission]]
+identifier = "deny-store-unencrypted"
+description = "Denies the store_unencrypted command without any pre-configured scope."
+commands.deny = ["store_unencrypted"]

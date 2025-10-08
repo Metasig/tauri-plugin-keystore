@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-retrieve-unencrypted"
+description = "Enables the retrieve_unencrypted command without any pre-configured scope."
+commands.allow = ["retrieve_unencrypted"]
+
+[[permission]]
+identifier = "deny-retrieve-unencrypted"
+description = "Denies the retrieve_unencrypted command without any pre-configured scope."
+commands.deny = ["retrieve_unencrypted"]
