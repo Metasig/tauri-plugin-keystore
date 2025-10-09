@@ -16,7 +16,7 @@ public struct KeystoreResult<T: Encodable>: Encodable {
 
 @available(iOS 15, *)
 public final class KeystoreCore {
-    public static let shared = KeystoreCore()
+    public static let shared = KeystoreCore() // Singleton
     private let securePrefs = UserDefaults(suiteName: "secure_storage")!
     private let plainPrefs = UserDefaults(suiteName: "unencrypted_store")!
     private let symEncAccount = "sym.enc"
