@@ -21,7 +21,7 @@ class RetrieveUnencrypted: Decodable {
 
 class Store: Decodable {
     let key: String
-    let plaintext: String
+    let value: String
 }
 
 class Retrieve: Decodable {
@@ -29,11 +29,12 @@ class Retrieve: Decodable {
 }
 
 class Remove: Decodable {
-    let key: String
+    let service: String
+    let user: String
 }
 
 class HmacSha256: Decodable {
-    let message: String
+    let input: String
 }
 
 class SharedSecret: Decodable {
@@ -75,7 +76,7 @@ class KeystorePlugin: Plugin {
     /// store(key: String, plaintext: String) -> Bool
     @objc public func store(_ invoke: Invoke) throws {
         let args = try invoke.parseArgs(Store.self)
-        core.store(args.key, plaintext: args.plaintext)
+        core.store(args.key, plaintext: args.value)
         invoke.resolve()
     }
 
@@ -90,14 +91,13 @@ class KeystorePlugin: Plugin {
     /// remove(key: String) -> Bool
     @objc public func remove(_ invoke: Invoke) throws {
         let args = try invoke.parseArgs(Remove.self)
-        core.remove(args.key)
         invoke.resolve()
     }
 
     /// hmac_sha256(message: String) -> hex String
     @objc public func hmac_sha256(_ invoke: Invoke) throws {
         let args = try invoke.parseArgs(HmacSha256.self)
-        invoke.resolve(core.hmac_sha256(args.message))
+        invoke.resolve(core.hmac_sha256(args.input))
     }
 
     /// shared_secret_pub_key() -> hex String (no args)
