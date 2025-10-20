@@ -17,18 +17,26 @@ public struct KeystoreResult<T: Encodable>: Encodable {
 @available(iOS 15, *)
 public final class KeystoreCore {
     public static let shared = KeystoreCore() // Singleton
-    private let securePrefs = UserDefaults(suiteName: "secure_storage")!
+    private let accessQueue: DispatchQueue = DispatchQueue(label: "app.metasig.keystore.access", attributes: .concurrent)
     private let plainPrefs = UserDefaults(suiteName: "unencrypted_store")!
     private let symEncAccount = "sym.enc"
     private let symHmacAccount = "sym.hmac"
     private let ecdhTag = "se.ecdh.private".data(using: .utf8)!
+    private let keychainService = "app.metasig.keystore.encrypted"
 
     private init() {}
 
     public func contains_key(_ key: String) -> KeystoreResult<Bool> {
-        let hasIv = securePrefs.string(forKey: "iv-\(key)") != nil
-        let hasCt = securePrefs.string(forKey: "ciphertext-\(key)") != nil
-        return KeystoreResult(ok: true, data: hasIv && hasCt)
+        return accessQueue.sync {
+            NSLog("🔍 DEBUG: Checking Keychain for key: \(key)")
+
+            let hasIv = keychainExists(forKey: "iv-\(key)")
+            let hasCt = keychainExists(forKey: "ciphertext-\(key)")
+
+            NSLog("🔒 Key '\(key)' check: IV exists: \(hasIv), CT exists: \(hasCt)")
+
+            return KeystoreResult(ok: true, data: hasIv && hasCt)
+        }
     }
 
     public func contains_unencrypted_key(_ key: String) -> KeystoreResult<Bool> {
@@ -47,54 +55,62 @@ public final class KeystoreCore {
     }
 
     public func store(_ key: String, plaintext: String) -> KeystoreResult<Bool> {
-        do {
-            let ctx = LAContext()
-            ctx.localizedReason = "Unlock to access encryption key"
-            let encKey = try loadOrCreateSymmetricKey(account: symEncAccount, context: ctx)
-            let nonce = AES.GCM.Nonce()
-            let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: encKey, nonce: nonce)
-            let ivB64 = Data(nonce.withUnsafeBytes { Data($0) }).base64EncodedString()
-            let ct = sealed.ciphertext + sealed.tag
-            let ctB64 = ct.base64EncodedString()
-            securePrefs.setValue(ivB64, forKey: "iv-\(key)")
-            securePrefs.setValue(ctB64, forKey: "ciphertext-\(key)")
-            return KeystoreResult(ok: true, data: true)
-        } catch {
-            return KeystoreResult(ok: false, data: nil, error: String(describing: error))
+        return accessQueue.sync(flags: .barrier) {
+            do {
+                let ctx = LAContext()
+                ctx.localizedReason = "Unlock to access encryption key"
+                let encKey = try loadOrCreateSymmetricKey(account: symEncAccount, context: ctx)
+                let nonce = AES.GCM.Nonce()
+                let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: encKey, nonce: nonce)
+                let ivB64 = Data(nonce.withUnsafeBytes { Data($0) }).base64EncodedString()
+                let ct = sealed.ciphertext + sealed.tag
+                let ctB64 = ct.base64EncodedString()
+
+                try saveToKeychain(value: ivB64, forKey: "iv-\(key)")
+                try saveToKeychain(value: ctB64, forKey: "ciphertext-\(key)")
+
+                return KeystoreResult(ok: true, data: true)
+            } catch {
+                return KeystoreResult(ok: false, data: nil, error: String(describing: error))
+            }
         }
     }
 
     public func retrieve(_ key: String) -> KeystoreResult<String?> {
-        do {
-            guard let ivB64 = securePrefs.string(forKey: "iv-\(key)"),
-                let ctB64 = securePrefs.string(forKey: "ciphertext-\(key)"),
-                let iv = Data(base64Encoded: ivB64),
-                let ct = Data(base64Encoded: ctB64)
-            else {
-                return KeystoreResult(ok: true, data: nil)
+        return accessQueue.sync {
+            do {
+                guard let ivB64 = try retrieveFromKeychain(forKey: "iv-\(key)"),
+                      let ctB64 = try retrieveFromKeychain(forKey: "ciphertext-\(key)"),
+                      let iv = Data(base64Encoded: ivB64),
+                      let ct = Data(base64Encoded: ctB64)
+                else {
+                    return KeystoreResult(ok: true, data: nil)
+                }
+                let ctx = LAContext()
+                ctx.localizedReason = "Unlock to access encryption key"
+                let encKey = try loadOrCreateSymmetricKey(account: symEncAccount, context: ctx)
+                guard iv.count == 12 else {
+                    return KeystoreResult(ok: false, data: nil, error: "bad_iv_length")
+                }
+                let nonce = try AES.GCM.Nonce(data: iv)
+                let ctOnly = ct.prefix(ct.count - 16)
+                let tag = ct.suffix(16)
+                let sealed = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ctOnly, tag: tag)
+                let plaintext = try AES.GCM.open(sealed, using: encKey)
+                return KeystoreResult(ok: true, data: String(data: plaintext, encoding: .utf8) ?? "")
+            } catch {
+                return KeystoreResult(ok: false, data: nil, error: String(describing: error))
             }
-            let ctx = LAContext()
-            ctx.localizedReason = "Unlock to access encryption key"
-            let encKey = try loadOrCreateSymmetricKey(account: symEncAccount, context: ctx)
-            guard iv.count == 12 else {
-                return KeystoreResult(ok: false, data: nil, error: "bad_iv_length")
-            }
-            let nonce = try AES.GCM.Nonce(data: iv)
-            let ctOnly = ct.prefix(ct.count - 16)
-            let tag = ct.suffix(16)
-            let sealed = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ctOnly, tag: tag)
-            let plaintext = try AES.GCM.open(sealed, using: encKey)
-            return KeystoreResult(ok: true, data: String(data: plaintext, encoding: .utf8) ?? "")
-        } catch {
-            return KeystoreResult(ok: false, data: nil, error: String(describing: error))
         }
     }
 
     public func remove(_ key: String) -> KeystoreResult<Bool> {
-        securePrefs.removeObject(forKey: "iv-\(key)")
-        securePrefs.removeObject(forKey: "ciphertext-\(key)")
-        plainPrefs.removeObject(forKey: key)
-        return KeystoreResult(ok: true, data: true)
+        return accessQueue.sync(flags: .barrier) {
+            deleteFromKeychain(forKey: "iv-\(key)")
+            deleteFromKeychain(forKey: "ciphertext-\(key)")
+            plainPrefs.removeObject(forKey: key)
+            return KeystoreResult(ok: true, data: true)
+        }
     }
 
     public func hmac_sha256(_ message: String) -> KeystoreResult<String> {
@@ -160,7 +176,84 @@ public final class KeystoreCore {
         }
     }
 
-    // Internals
+    // MARK: - Keychain Helper Methods
+
+    private func keychainExists(forKey key: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: false,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    private func saveToKeychain(value: String, forKey key: String) throws {
+        guard let data = value.data(using: .utf8) else {
+            throw NSError(domain: "KeystoreCore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode string"])
+        }
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        // Delete existing item if present
+        SecItemDelete(query as CFDictionary)
+
+        // Add new item
+        let status = SecItemAdd(query as CFDictionary, nil)
+
+        guard status == errSecSuccess else {
+            throw NSError(domain: "KeystoreCore", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Failed to save to Keychain. Status: \(status)"])
+        }
+    }
+
+    private func retrieveFromKeychain(forKey key: String) throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecItemNotFound {
+            return nil
+        }
+
+        guard status == errSecSuccess else {
+            throw NSError(domain: "KeystoreCore", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Failed to retrieve from Keychain. Status: \(status)"])
+        }
+
+        guard let data = result as? Data,
+              let string = String(data: data, encoding: .utf8) else {
+            throw NSError(domain: "KeystoreCore", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to decode data"])
+        }
+
+        return string
+    }
+
+    private func deleteFromKeychain(forKey key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: key
+        ]
+
+        SecItemDelete(query as CFDictionary)
+    }
+
+    // MARK: - Internals
 
     private func loadOrCreateSymmetricKey(account: String, context: LAContext?) throws
         -> SymmetricKey
@@ -195,5 +288,27 @@ public final class KeystoreCore {
             throw error!.takeRetainedValue() as Error
         }
         return ac
+    }
+
+    // MARK: - Utility Methods (assumed to exist)
+
+    private func dataToHex(_ data: Data) -> String {
+        return data.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func hexToData(_ hex: String) -> Data? {
+        var data = Data()
+        var hex = hex
+        if hex.count % 2 != 0 {
+            return nil
+        }
+        while !hex.isEmpty {
+            let index = hex.index(hex.startIndex, offsetBy: 2)
+            let byteString = String(hex[..<index])
+            hex = String(hex[index...])
+            guard let byte = UInt8(byteString, radix: 16) else { return nil }
+            data.append(byte)
+        }
+        return data
     }
 }
