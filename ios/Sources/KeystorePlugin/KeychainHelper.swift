@@ -16,18 +16,26 @@ final class KeychainHelper {
     static func saveGenericPassword(account: String, data: Data, access: SecAccessControl) throws {
         _ = try? deleteGenericPassword(account: account)
 
+        NSLog("🔍 DEBUG:  saveGenericPassword '\(account)' query declaration")
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
             kSecAttrAccessControl as String: access,
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
             kSecValueData as String: data
         ]
 
+        NSLog("🔍 DEBUG:  Account '\(account)' SecItemAdd")
         let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else { throw KeychainError.unhandledOSStatus(status) }
+        NSLog("🔍 DEBUG:  Account '\(account)' with status: \(status)")
+        guard status == errSecSuccess else {
+            NSLog("❌ ERROR: Account '\(account)' with status: \(status)")
+            if let error = SecCopyErrorMessageString(status, nil) as String? {
+                NSLog("❌ Error message: \(error)")
+            }
+            throw KeychainError.unhandledOSStatus(status)
+        }
     }
 
     static func retrieveGenericPassword(account: String, context: LAContext?) throws -> Data {
@@ -39,14 +47,37 @@ final class KeychainHelper {
             kSecReturnData as String: true,
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any
         ]
+
         if let ctx = context {
-            query[kSecUseAuthenticationContext as String] = ctx
+            // Cast correctly for LAContext
+            query[kSecUseAuthenticationContext as String] = ctx as Any
+
+            // Allow UI for authentication if needed
+            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIAllow
         }
+
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status != errSecItemNotFound else { throw KeychainError.itemNotFound }
-        guard status == errSecSuccess else { throw KeychainError.unhandledOSStatus(status) }
-        guard let data = item as? Data else { throw KeychainError.typeMismatch }
+
+        guard status != errSecItemNotFound else {
+            NSLog("🔍 DEBUG: Item not found for account: \(account)")
+            throw KeychainError.itemNotFound
+        }
+
+        guard status == errSecSuccess else {
+            NSLog("❌ ERROR: Failed to retrieve item for account '\(account)' with status: \(status)")
+            if let error = SecCopyErrorMessageString(status, nil) as String? {
+                NSLog("❌ Error message: \(error)")
+            }
+            throw KeychainError.unhandledOSStatus(status)
+        }
+
+        guard let data = item as? Data else {
+            NSLog("❌ ERROR: Type mismatch for account: \(account)")
+            throw KeychainError.typeMismatch
+        }
+
+        NSLog("✅ Successfully retrieved data for account: \(account)")
         return data
     }
 

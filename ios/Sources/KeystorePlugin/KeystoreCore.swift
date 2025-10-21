@@ -56,21 +56,28 @@ public final class KeystoreCore {
 
     public func store(_ key: String, plaintext: String) -> KeystoreResult<Bool> {
         return accessQueue.sync(flags: .barrier) {
+            NSLog("🔍 Key '\(key)' store begin")
             do {
+                NSLog("🔍 DEBUG: Key '\(key)' store start LAContext")
                 let ctx = LAContext()
+                NSLog("🔍 DEBUG:  Key '\(key)' store initiated LAContext")
                 ctx.localizedReason = "Unlock to access encryption key"
                 let encKey = try loadOrCreateSymmetricKey(account: symEncAccount, context: ctx)
+                NSLog("🔍 DEBUG:  Key '\(key)' store create encKey")
                 let nonce = AES.GCM.Nonce()
                 let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: encKey, nonce: nonce)
+                NSLog("🔍 DEBUG:  Key '\(key)' store sealed")
                 let ivB64 = Data(nonce.withUnsafeBytes { Data($0) }).base64EncodedString()
                 let ct = sealed.ciphertext + sealed.tag
                 let ctB64 = ct.base64EncodedString()
 
+                NSLog("🔍 DEBUG:  Key '\(key)' store saveToKeychain")
                 try saveToKeychain(value: ivB64, forKey: "iv-\(key)")
                 try saveToKeychain(value: ctB64, forKey: "ciphertext-\(key)")
 
                 return KeystoreResult(ok: true, data: true)
             } catch {
+                NSLog("❌ ERROR: Key '\(key)' store: value: \(plaintext) with error \(String(describing: error))")
                 return KeystoreResult(ok: false, data: nil, error: String(describing: error))
             }
         }
@@ -193,8 +200,11 @@ public final class KeystoreCore {
 
     private func saveToKeychain(value: String, forKey key: String) throws {
         guard let data = value.data(using: .utf8) else {
+            NSLog("💥 Failed to encode string")
             throw NSError(domain: "KeystoreCore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode string"])
         }
+
+        NSLog("🔒 Key '\(key)' store: value: \(value)")
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -258,15 +268,20 @@ public final class KeystoreCore {
     private func loadOrCreateSymmetricKey(account: String, context: LAContext?) throws
         -> SymmetricKey
     {
+        NSLog("🔍 DEBUG:  Account '\(account)' loadOrCreateSymmetricKey")
         if let data = try? KeychainHelper.retrieveGenericPassword(
             account: account, context: context)
         {
+            NSLog("🔍 DEBUG:  Account '\(account)' retrieveGenericPassword success, return the key immediately")
             return SymmetricKey(data: data)
         }
         let key = SymmetricKey(size: .bits256)
         let data = key.withUnsafeBytes { Data($0) }
+        NSLog("🔍 DEBUG:  Account '\(account)' key declaration")
         let access = try makeAccessControl(requirePrivateKeyUsage: false)
+        NSLog("🔍 DEBUG:  Account '\(account)' key make access: \(access)")
         try KeychainHelper.saveGenericPassword(account: account, data: data, access: access)
+        NSLog("🔍 DEBUG:  Account '\(account)' key helper save GenericPassword done")
         return key
     }
 
@@ -276,10 +291,19 @@ public final class KeystoreCore {
     }
 
     private func makeAccessControl(requirePrivateKeyUsage: Bool) throws -> SecAccessControl {
-        var flags: SecAccessControlCreateFlags = [.biometryCurrentSet, .userPresence]
+        // FIX: Don't combine .biometryCurrentSet with .userPresence
+        var flags: SecAccessControlCreateFlags
+
         if requirePrivateKeyUsage {
-            flags.insert(.privateKeyUsage)
+            // For secure enclave keys, use .userPresence with .privateKeyUsage
+            // (This is a valid combination according to the error)
+            flags = [.userPresence, .privateKeyUsage]
+        } else {
+            // For symmetric keys, just use biometryCurrentSet alone
+            // (Don't combine with .userPresence)
+            flags = [.biometryCurrentSet]
         }
+
         var error: Unmanaged<CFError>?
         guard
             let ac = SecAccessControlCreateWithFlags(
