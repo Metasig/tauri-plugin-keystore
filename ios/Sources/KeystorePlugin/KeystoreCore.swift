@@ -20,6 +20,7 @@ public final class KeystoreCore {
     private let accessQueue: DispatchQueue = DispatchQueue(label: "app.metasig.keystore.access", attributes: .concurrent)
     private let plainPrefs = UserDefaults(suiteName: "unencrypted_store")!
     private let keychainServiceGroupName = "app.metasig.keystore.encrypted"
+    let hmacKeyAlias = "app.metasig.hmac.key"
     
     private init() {}
 
@@ -97,9 +98,33 @@ public final class KeystoreCore {
         }
     }
     
-    // FIXME: Not sure what to do here
     public func hmac_sha256(_ message: String) -> KeystoreResult<String> {
-        return KeystoreResult(ok: false, data: nil, error: "Not implement")
+        return accessQueue.sync {
+            do {
+                // Ensure HMAC key exists
+                try ensureHmacKey()
+
+                // Retrieve the key (this will trigger biometric authentication)
+                guard let keyBase64 = try retrieveFromKeychain(forKey: hmacKeyAlias),
+                      let keyData = Data(base64Encoded: keyBase64) else {
+                    throw NSError(domain: "KeystoreCore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to retrieve HMAC key"])
+                }
+
+                let key = SymmetricKey(data: keyData)
+
+                // Compute the HMAC
+                let messageData = Data(message.utf8)
+                let tag = HMAC<SHA256>.authenticationCode(for: messageData, using: key)
+
+                // Convert to hexadecimal string
+                let hexString = tag.map { String(format: "%02x", $0) }.joined()
+
+                return KeystoreResult(ok: true, data: hexString)
+            } catch {
+                NSLog("❌ ERROR: HMAC computation failed: \(error)")
+                return KeystoreResult(ok: false, data: nil, error: "Failed to compute HMAC-SHA256: \(error.localizedDescription)")
+            }
+        }
     }
     
     public func shared_secret_pub_key() -> KeystoreResult<String> {
@@ -109,8 +134,29 @@ public final class KeystoreCore {
     public func shared_secret(_ pubKeys: [String]) -> KeystoreResult<[String]> {
         return KeystoreResult(ok: false, data: nil, error: "Not implement")
     }
-    
+
     // MARK: - Keychain Helper Methods
+
+    private func ensureHmacKey() throws {
+
+        // Check if the key already exists
+        if let _ = try? retrieveFromKeychain(forKey: hmacKeyAlias) {
+            // Key already exists, nothing to do
+            return
+        }
+
+        // Create a new key if it doesn't exist
+        let newKey = SymmetricKey(size: .bits256)
+        let keyData = newKey.withUnsafeBytes { Data($0) }
+        let keyBase64 = keyData.base64EncodedString()
+
+        // Store the key in the keychain with biometric protection
+        // Your existing saveToKeychain method already handles the biometric requirement
+        try saveToKeychain(value: keyBase64, forKey: hmacKeyAlias)
+
+        NSLog("✅ Created new HMAC key")
+    }
+
     /**
      *
      */

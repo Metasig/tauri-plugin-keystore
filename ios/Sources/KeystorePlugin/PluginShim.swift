@@ -97,7 +97,9 @@ class KeystorePlugin: Plugin {
     /// hmac_sha256(message: String) -> hex String
     @objc public func hmac_sha256(_ invoke: Invoke) throws {
         let args = try invoke.parseArgs(HmacSha256.self)
-        invoke.resolve(core.hmac_sha256(args.input))
+        let response = core.hmac_sha256(args.input)
+        let json = ["output": response.data ?? "null"]
+        invoke.resolve(json)
     }
 
     /// shared_secret_pub_key() -> hex String (no args)
