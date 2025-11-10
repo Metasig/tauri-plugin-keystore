@@ -2,6 +2,9 @@ name: publish
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/publish-private-package
 
 jobs:
   publish_gh_packages:
