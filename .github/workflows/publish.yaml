@@ -33,6 +33,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: pnpm publish
-        run: npm publish --access restricted
+        run: pnpm publish --access restricted --publish-branch feat/publish-private-package --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
