@@ -1,5 +1,5 @@
 {
-  "name": "@impierce/tauri-plugin-keystore",
+  "name": "@metasig/tauri-plugin-keystore",
   "version": "2.1.0-alpha.1",
   "author": "daniel-mader",
   "description": "Interact with the device-native key storage (Android Keystore, iOS Keychain).",
@@ -33,10 +33,6 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/impierce/tauri-plugin-keystore.git"
-  },
-  "bugs": {
-    "url": "https://github.com/impierce/tauri-plugin-keystore/issues"
-  },
-  "homepage": "https://github.com/impierce/tauri-plugin-keystore#readme"
+    "url": "git+https://github.com/Metasig/tauri-plugin-keystore.git"
+  }
 }
