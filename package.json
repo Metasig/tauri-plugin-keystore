@@ -33,10 +33,6 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/impierce/tauri-plugin-keystore.git"
-  },
-  "bugs": {
-    "url": "https://github.com/impierce/tauri-plugin-keystore/issues"
-  },
-  "homepage": "https://github.com/impierce/tauri-plugin-keystore#readme"
+    "url": "git+https://github.com/Metasig/tauri-plugin-keystore.git"
+  }
 }
