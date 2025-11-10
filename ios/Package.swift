@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "tauri-plugin-keystore",
     platforms: [
-        .iOS(.v17)
+        .iOS(.v15)
     ],
     products: [
         .library(
