@@ -40,7 +40,7 @@ export async function containsKey(key: string): Promise<boolean> {
         payload: {
             key
         }
-    }).then()
+    })
 }
 
 export async function retrieve(key: string): Promise<string | null> {
