@@ -1,8 +1,8 @@
 {
   "name": "@metasig/tauri-plugin-keystore-api",
-  "version": "2.1.0-alpha.6",
+  "version": "2.2.0",
   "author": "0x330a",
-  "description": "Interact with the device-native key storage (Android Keystore, iOS Keychain). perform ecdh operations for generating symmetric keys",
+  "description": "Interact with the device-native key storage (Android Keystore, iOS Keychain) & perform ecdh operations for generating symmetric keys",
   "type": "module",
   "types": "./dist-js/index.d.ts",
   "main": "./dist-js/index.cjs",
