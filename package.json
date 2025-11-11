@@ -1,5 +1,5 @@
 {
-  "name": "@0x330a/tauri-plugin-keystore-api",
+  "name": "@metasig/tauri-plugin-keystore-api",
   "version": "2.1.0-alpha.6",
   "author": "0x330a",
   "description": "Interact with the device-native key storage (Android Keystore, iOS Keychain). perform ecdh operations for generating symmetric keys",
@@ -34,6 +34,6 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0x330a-public/tauri-plugin-keystore.git"
+    "url": "git+https://github.com/Metasig/tauri-plugin-keystore.git"
   }
 }
