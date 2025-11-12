@@ -2,6 +2,9 @@ name: publish
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   publish_gh_packages:
@@ -33,26 +36,3 @@ jobs:
         run: pnpm publish --access restricted
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release:
-    needs: publish_gh_packages
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write # publish a GitHub release
-      issues: write # comment on released issues
-      pull-requests: write # comment on released pull requests
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-
-      - name: semantic-release
-        run: npx semantic-release@24
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

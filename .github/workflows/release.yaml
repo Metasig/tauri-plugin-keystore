@@ -2,9 +2,18 @@ name: release
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - publish
+    types:
+      - completed
 
 jobs:
   release:
+    # Run on manual dispatch OR when the `publish` workflow completes successfully.
+    # When triggered by workflow_run, `github.event.workflow_run.conclusion` is set.
+    # Keep manual dispatch available as well.
+    if: "${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}"
     runs-on: ubuntu-latest
 
     permissions:
@@ -20,8 +29,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
+      - name: Read package version
+        id: pkg
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
 
-      - name: semantic-release
-        run: npx semantic-release@24
+      - name: Create tag from package.json version
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          set -e
+          TAG="v${VERSION}"
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            echo "Tag $TAG already exists on remote."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}
+          name: Release v${{ steps.pkg.outputs.version }}
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

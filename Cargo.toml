@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-keystore"
-version = "2.2.0"
+version = "2.3.1"
 authors = ["0x330a"]
 description = "Interact with the device-native key storage (Android Keystore, iOS Keychain) & perform ecdh operations for generating symmetric keys"
 edition = "2021"
