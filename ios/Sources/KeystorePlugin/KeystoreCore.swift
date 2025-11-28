@@ -20,10 +20,10 @@ public final class KeystoreCore {
     private let accessQueue: DispatchQueue = DispatchQueue(label: "app.metasig.keystore.access", attributes: .concurrent)
     private let plainPrefs = UserDefaults(suiteName: "unencrypted_store")!
     private let keychainServiceGroupName = "app.metasig.keystore.encrypted"
-    let hmacKeyAlias = "app.metasig.hmac.key"
+    let hmacKeyAlias = "app.metasig.hmac.key.v2"
     
     private init() {}
-
+    
     /**
      *
      */
@@ -31,7 +31,7 @@ public final class KeystoreCore {
         let exists = plainPrefs.object(forKey: key) != nil
         return KeystoreResult(ok: true, data: exists)
     }
-
+    
     /**
      *
      */
@@ -39,7 +39,7 @@ public final class KeystoreCore {
         plainPrefs.setValue(value, forKey: key)
         return KeystoreResult(ok: true, data: true)
     }
-
+    
     /**
      *
      */
@@ -47,29 +47,29 @@ public final class KeystoreCore {
         let v = plainPrefs.string(forKey: key)
         return KeystoreResult(ok: true, data: v)
     }
-
+    
     /**
      *
      */
     public func contains_key(_ key: String) -> KeystoreResult<Bool> {
         return accessQueue.sync {
             NSLog("🔍 DEBUG: Checking Keychain for key: \(key)")
-
+            
             let hasKey = keychainExists(forKey: key)
-
+            
             NSLog("🔒 Key '\(key)' check: \(hasKey)")
-
+            
             return KeystoreResult(ok: true, data: hasKey)
         }
     }
-
+    
     public func store(_ key: String, plaintext: String) -> KeystoreResult<Bool> {
         return accessQueue.sync(flags: .barrier) {
             NSLog("🔍 Key '\(key)' store begin")
             do {
                 NSLog("🔍 DEBUG:  Key '\(key)' store saveToKeychain")
                 try saveToKeychain(value: plaintext, forKey: key)
-
+                
                 return KeystoreResult(ok: true, data: true)
             } catch {
                 NSLog("❌ ERROR: Key '\(key)' store with error \(String(describing: error))")
@@ -103,22 +103,22 @@ public final class KeystoreCore {
             do {
                 // Ensure HMAC key exists
                 try ensureHmacKey()
-
+                
                 // Retrieve the key (this will trigger biometric authentication)
                 guard let keyBase64 = try retrieveFromKeychain(forKey: hmacKeyAlias),
                       let keyData = Data(base64Encoded: keyBase64) else {
                     throw NSError(domain: "KeystoreCore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to retrieve HMAC key"])
                 }
-
+                
                 let key = SymmetricKey(data: keyData)
-
+                
                 // Compute the HMAC
                 let messageData = Data(message.utf8)
                 let tag = HMAC<SHA256>.authenticationCode(for: messageData, using: key)
-
+                
                 // Convert to hexadecimal string
                 let hexString = tag.map { String(format: "%02x", $0) }.joined()
-
+                
                 return KeystoreResult(ok: true, data: hexString)
             } catch {
                 NSLog("❌ ERROR: HMAC computation failed: \(error)")
@@ -134,29 +134,29 @@ public final class KeystoreCore {
     public func shared_secret(_ pubKeys: [String]) -> KeystoreResult<[String]> {
         return KeystoreResult(ok: false, data: nil, error: "Not implement")
     }
-
+    
     // MARK: - Keychain Helper Methods
-
+    
     private func ensureHmacKey() throws {
-
+        
         // Check if the key already exists
         if let _ = try? retrieveFromKeychain(forKey: hmacKeyAlias) {
             // Key already exists, nothing to do
             return
         }
-
+        
         // Create a new key if it doesn't exist
         let newKey = SymmetricKey(size: .bits256)
         let keyData = newKey.withUnsafeBytes { Data($0) }
         let keyBase64 = keyData.base64EncodedString()
-
+        
         // Store the key in the keychain with biometric protection
         // Your existing saveToKeychain method already handles the biometric requirement
         try saveToKeychain(value: keyBase64, forKey: hmacKeyAlias)
-
+        
         NSLog("✅ Created new HMAC key")
     }
-
+    
     /**
      *
      */
@@ -172,7 +172,7 @@ public final class KeystoreCore {
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         return status == errSecSuccess
     }
-
+    
     /**
      *
      */
@@ -181,11 +181,13 @@ public final class KeystoreCore {
             NSLog("💥 Failed to encode string")
             throw NSError(domain: "KeystoreCore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode string"])
         }
-
+        
         NSLog("🔒 Key '\(key)' store: value: [REDACTED]")
-
-        let access = try makeAccessControl(requirePrivateKeyUsage: false)
-
+        
+        // Use relaxed access control for HMAC key, strict for others
+        let isHmacKey = (key == hmacKeyAlias)
+        let access = try makeAccessControl(requirePrivateKeyUsage: false, relaxedForHmac: isHmacKey)
+        
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainServiceGroupName,
@@ -194,7 +196,7 @@ public final class KeystoreCore {
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
             kSecValueData as String: data
         ]
-
+        
         // Delete existing item if present
         SecItemDelete(query as CFDictionary)
         
@@ -211,20 +213,25 @@ public final class KeystoreCore {
     }
     
     private func retrieveFromKeychain(forKey key: String) throws -> String? {
-        let context = LAContext()
-        context.localizedReason = "Access your passkey"
-
-        // You can explicitly enable passcode fallback
-        context.localizedFallbackTitle = "Use Passcode" // Custom text for passcode button
-
-        let query: [String: Any] = [
+        // For HMAC key, don't require authentication context (allows access when device is unlocked)
+        // For other keys, require explicit biometric/passcode authentication
+        let isHmacKey = (key == hmacKeyAlias)
+        
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainServiceGroupName,
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationContext as String: context
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
+        
+        // Only add authentication context for non-HMAC keys
+        if !isHmacKey {
+            let context = LAContext()
+            context.localizedReason = "Access your passkey"
+            context.localizedFallbackTitle = "Use Passcode"
+            query[kSecUseAuthenticationContext as String] = context
+        }
         
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -232,7 +239,7 @@ public final class KeystoreCore {
         if status == errSecItemNotFound {
             return nil
         }
-
+        
         guard status == errSecSuccess else {
             NSLog("❌ ERROR: Failed to retrieve key '\(key)' with status: \(status)")
             if let error = SecCopyErrorMessageString(status, nil) as String? {
@@ -240,23 +247,23 @@ public final class KeystoreCore {
             }
             throw NSError(domain: "KeystoreCore", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Failed to retrieve from Keychain. Status: \(status)"])
         }
-
+        
         guard let data = result as? Data else {
             NSLog("❌ ERROR: Retrieved item for key '\(key)' but couldn't cast to Data")
             throw NSError(domain: "KeystoreCore", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to cast result to Data"])
         }
-
+        
         guard let string = String(data: data, encoding: .utf8) else {
             NSLog("❌ ERROR: Retrieved Data for key '\(key)' but couldn't decode as UTF-8 string")
             NSLog("❌ DEBUG: Data length: \(data.count) bytes, first few bytes: \(data.prefix(min(10, data.count)).map { String(format: "%02x", $0) }.joined())")
             throw NSError(domain: "KeystoreCore", code: -3, userInfo: [NSLocalizedDescriptionKey: "Failed to decode data as UTF-8 string"])
         }
-
+        
         NSLog("✅ SUCCESS: Retrieved and decoded item for key '\(key)'")
-
+        
         return string
     }
-
+    
     /**
      *
      */
@@ -270,31 +277,40 @@ public final class KeystoreCore {
         SecItemDelete(query as CFDictionary)
     }
     
-    /**
-     * Policy for storing value: must require biometric or device passcode or private key if true
-     */
-    private func makeAccessControl(requirePrivateKeyUsage: Bool) throws -> SecAccessControl {
-        // Use OR to allow multiple authentication methods
-        var flags: SecAccessControlCreateFlags = [.or]
-        
-        // Add biometrics if available
-        flags.insert(.biometryAny)
-        
-        // Also allow device passcode as a fallback
-        flags.insert(.devicePasscode)
-        
-        // Add private key usage if needed
-        if requirePrivateKeyUsage {
-            flags.insert(.privateKeyUsage)
+    
+    private func makeAccessControl(requirePrivateKeyUsage: Bool, relaxedForHmac: Bool = false) throws -> SecAccessControl {
+        if relaxedForHmac {
+            // For HMAC key: only require device to be unlocked, no biometric/passcode prompt
+            var error: Unmanaged<CFError>?
+            guard let ac = SecAccessControlCreateWithFlags(
+                nil,
+                kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+                [], // No additional flags - just "when unlocked"
+                &error
+            ) else {
+                throw error!.takeRetainedValue() as Error
+            }
+            return ac
+        } else {
+            // For other keys: strict authentication required
+            var flags: SecAccessControlCreateFlags = [.or]
+            flags.insert(.biometryAny)
+            flags.insert(.devicePasscode)
+            
+            if requirePrivateKeyUsage {
+                flags.insert(.privateKeyUsage)
+            }
+            
+            var error: Unmanaged<CFError>?
+            guard let ac = SecAccessControlCreateWithFlags(
+                nil,
+                kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+                flags,
+                &error
+            ) else {
+                throw error!.takeRetainedValue() as Error
+            }
+            return ac
         }
-        
-        var error: Unmanaged<CFError>?
-        guard
-            let ac = SecAccessControlCreateWithFlags(
-                nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, flags, &error)
-        else {
-            throw error!.takeRetainedValue() as Error
-        }
-        return ac
     }
 }
