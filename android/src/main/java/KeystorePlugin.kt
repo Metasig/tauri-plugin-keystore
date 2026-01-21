@@ -280,12 +280,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
             val parameterSpec = KeyGenParameterSpec.Builder(
                 KEY_HMAC_ALIAS,
                 KeyProperties.PURPOSE_SIGN
-            )
-                // Require authentication on every use:
-                .setUserAuthenticationRequired(!BuildConfig.DEBUG)
-                .setInvalidatedByBiometricEnrollment(false)
-                .setUserAuthenticationValidityDurationSeconds(-1)
-                .build()
+            ).build()
             keyGenerator.init(parameterSpec)
             keyGenerator.generateKey()
         }
