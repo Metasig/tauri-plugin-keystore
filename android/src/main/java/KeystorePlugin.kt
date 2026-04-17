@@ -570,7 +570,7 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
             mac.init(key)
             val resultBytes = mac.doFinal(request.input.toByteArray())
 
-            val hexOutput = encode(resultBytes)
+            val hexOutput = encode(resultBytes, prefix = "")
 
             val response = Hmac256Response(output = hexOutput)
             invoke.resolveObject(response)
